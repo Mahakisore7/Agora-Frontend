@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-
+// Server-side Supabase client — used in Server Components and Route Handlers
+// Reads auth session from HTTP cookies (the only way servers can access auth)
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
   return createServerClient(
@@ -15,7 +16,7 @@ export async function createServerSupabaseClient() {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             );
-          } catch {} 
+          } catch {}
         },
       },
     }

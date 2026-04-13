@@ -38,6 +38,6 @@ export async function getDebateResults(sessionId: string, token: string) {
   const res = await fetch(`${API_BASE}/api/v1/debates/${sessionId}/results`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error("Results not available yet");
+  if (!res.ok) throw new Error("Results not available yet. Match may still be processing.");
   return res.json();
 }
