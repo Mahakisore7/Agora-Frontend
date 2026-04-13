@@ -2,9 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-// This route is called by Supabase after OAuth completes
-// URL: /auth/callback?code=xxx
-// We exchange the code for a session, set cookies, and redirect to dashboard
+// Called by Supabase after Google/GitHub OAuth completes
+// URL pattern: /auth/callback?code=xxx&next=/dashboard
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
@@ -27,13 +26,10 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // Exchange the code for a session — sets the auth cookie
+    // Exchange the temporary code for a real session → sets auth cookie
     await supabase.auth.exchangeCodeForSession(code);
-    // After exchangeCodeForSession:
-const next = requestUrl.searchParams.get("next") || "/dashboard";
-return NextResponse.redirect(new URL(next, request.url));
-
   }
 
+  // Redirect to wherever the user was trying to go
   return NextResponse.redirect(new URL(next, request.url));
 }
