@@ -33,3 +33,11 @@ export async function createMatch(
 
   return res.json();
 }
+
+export async function getDebateResults(sessionId: string, token: string) {
+  const res = await fetch(`${API_BASE}/api/v1/debates/${sessionId}/results`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Results not available yet");
+  return res.json();
+}
