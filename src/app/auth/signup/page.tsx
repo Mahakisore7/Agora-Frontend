@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -38,7 +38,6 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const [done, setDone] = useState(false);
-  const { toast } = useToast();
   const supabase = createClient();
 
   const redirectTo = typeof window !== "undefined"
@@ -62,7 +61,7 @@ export default function SignupPage() {
     setLoading(true);
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) {
-      toast({ title: "Signup Failed", description: error.message, variant: "destructive" });
+      toast.error("Signup Failed", { description: error.message });
       setLoading(false);
       return;
     }

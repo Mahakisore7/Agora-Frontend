@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 // Inline SVG icons — no extra package needed
 const GoogleIcon = () => (
@@ -41,7 +41,6 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { toast } = useToast();
   const supabase = createClient();
 
   const redirectTo = typeof window !== "undefined"
@@ -53,7 +52,7 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      toast({ title: "Login failed", description: error.message, variant: "destructive" });
+      toast.error("Login failed", { description: error.message });
       setLoading(false);
       return;
     }
@@ -75,7 +74,7 @@ export default function LoginPage() {
       },
     });
     if (error) {
-      toast({ title: `${provider} login failed`, description: error.message, variant: "destructive" });
+      toast.error(`${provider} login failed`, { description: error.message });
       setOauthLoading(null);
     }
     // Don't clear loading — user is being redirected away

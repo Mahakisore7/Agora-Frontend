@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const SAMPLE_MOTIONS = [
   "This house believes that AI will do more harm than good",
@@ -19,7 +19,6 @@ const SAMPLE_MOTIONS = [
 export default function MatchSetupPage() {
   const { session } = useAuth();
   const router = useRouter();
-  const { toast } = useToast();
 
   const [motion, setMotion] = useState("");
   const [side, setSide] = useState<"government" | "opposition">("government");
@@ -29,11 +28,11 @@ export default function MatchSetupPage() {
 
   const handleStart = async () => {
     if (!motion.trim()) {
-      toast({ title: "Missing Motion", description: "Please enter or choose a motion.", variant: "destructive" });
+      toast.warning("Missing Motion", { description: "Please enter or choose a motion." });
       return;
     }
     if (!session?.access_token) {
-      toast({ title: "Not logged in", description: "Please log in again.", variant: "destructive" });
+      toast.error("Not logged in", { description: "Please log in again." });
       return;
     }
 
@@ -45,7 +44,7 @@ export default function MatchSetupPage() {
       );
       router.push(`/debate/${result.match_id}`);
     } catch (err) {
-      toast({ title: "Failed to create match", description: String(err), variant: "destructive" });
+      toast.error("Failed to create match", { description: String(err) });
       setLoading(false);
     }
   };
