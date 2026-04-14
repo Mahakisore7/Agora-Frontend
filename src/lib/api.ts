@@ -8,7 +8,7 @@ interface CreateMatchPayload {
 }
 
 interface CreateMatchResponse {
-  match_id: string;
+  session_id: string;
   status: string;
   schedule: Array<{ role: string; side: string; player_type: string }>;
 }
