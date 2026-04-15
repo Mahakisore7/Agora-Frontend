@@ -6,24 +6,25 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useArenaStore } from "@/store/arenaStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Mic, MicOff, SkipForward, Hand } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function LiveArenaPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const { session } = useAuth();
   const router = useRouter();
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const [poiText, setPoiText] = useState("");
-  const [poiOpen, setPoiOpen] = useState(false);
-  const [elapsed, setElapsed] = useState(0); // seconds elapsed in current speech
+  
+  // Microphone Tracking
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
 
   const {
-    connect, disconnect, sendEvent,
+    connect, disconnect, sendEvent, getSocket,
     connected, transcript, aiBufferedText,
-    isMatchComplete, verdict,
+    isMatchComplete, currentSpeaker, currentSpeakerRole
   } = useArenaStore();
 
-  // Connect on mount, disconnect on unmount
   useEffect(() => {
     if (session?.access_token && matchId) {
       connect(matchId, session.access_token);
@@ -31,112 +32,235 @@ export default function LiveArenaPage() {
     return () => disconnect();
   }, [matchId, session?.access_token]);
 
-  // Track elapsed time for POI window
-  useEffect(() => {
-    const interval = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Auto-scroll transcript
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript, aiBufferedText]);
 
-  // Redirect to results when match complete
   useEffect(() => {
     if (isMatchComplete) {
       setTimeout(() => router.push(`/results/${matchId}`), 2000);
     }
   }, [isMatchComplete]);
 
-  const handleEndTurn = () => sendEvent({ action: "END_TURN" });
+  // Production-Grade MediaRecorder Streaming
+  const toggleMic = async () => {
+    if (isRecording) {
+      mediaRecorder.current?.stop();
+      mediaRecorder.current?.stream.getTracks().forEach(t => t.stop());
+      setIsRecording(false);
+      return;
+    }
 
-  const handleOfferPOI = () => {
-    if (!poiText.trim()) return;
-    sendEvent({ action: "POI_OFFERED", text: poiText, elapsed_seconds: elapsed });
-    setPoiText("");
-    setPoiOpen(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      mediaRecorder.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        const socket = getSocket();
+        if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
+          socket.send(e.data); // Streams binary blob to Deepgram!
+        }
+      };
+      
+      recorder.start(250); // Slice and send every 250ms
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Microphone access denied:", err);
+      alert("Please allow microphone permissions in your browser.");
+    }
   };
 
-  // POI window open between 60s and 240s
-  const poiWindowOpen = elapsed >= 60 && elapsed <= 240;
+  const handleEndTurn = () => {
+    if (isRecording) toggleMic();
+    sendEvent({ action: "END_TURN" });
+  };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Top bar */}
-      <div className="border-b p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="font-semibold">Live Debate</h1>
-          <Badge variant={connected ? "default" : "secondary"}>
-            {connected ? "Connected" : "Connecting..."}
-          </Badge>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
-        </div>
-      </div>
+    <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
+      
+      {/* Background ambient glow */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-900/30 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-900/30 blur-[120px] rounded-full pointer-events-none" />
 
-      {/* Transcript */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 max-w-4xl mx-auto w-full">
-        {transcript.map((entry, i) => (
-          <div key={i} className={`flex ${entry.speaker === "AI" ? "justify-start" : "justify-end"}`}>
-            <div className={`max-w-[80%] rounded-lg p-4 ${
-              entry.speaker === "AI"
-                ? "bg-muted text-foreground"
-                : "bg-primary text-primary-foreground"
-            }`}>
-              <p className="text-xs font-medium mb-1 opacity-70">{entry.speaker}</p>
-              <p>{entry.content}</p>
-            </div>
+      <header className="border-b border-indigo-500/20 bg-indigo-950/40 backdrop-blur-3xl p-5 flex items-center justify-between z-20 shadow-2xl">
+        <div className="flex items-center gap-6">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-[0_0_15px_rgba(99,102,241,0.6)]">
+            <Hand className="w-6 h-6 text-white" />
           </div>
-        ))}
+          <div>
+            <h1 className="text-2xl font-black tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent drop-shadow-md">Agora Arena</h1>
+            <p className="text-xs font-semibold text-indigo-300/80 uppercase tracking-widest mt-1">Live Match</p>
+          </div>
+        </div>
+        <Badge variant={connected ? "default" : "destructive"} className={`hidden sm:flex px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${connected ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" : "bg-red-500/20 text-red-400 border border-red-500/50"}`}>
+          {connected ? "● Server Active" : "○ Disconnected"}
+        </Badge>
+      </header>
 
-        {/* AI streaming token buffer */}
+      {/* Transcript Area */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 max-w-5xl mx-auto w-full z-10 scrollbar-hide">
+        <AnimatePresence>
+          {transcript.map((entry, i) => (
+            <motion.div 
+              key={i} 
+              initial={{ opacity: 0, y: 15, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              className={`flex items-end gap-3 ${entry.speaker === "AI" ? "justify-start" : "justify-end"}`}
+            >
+              {entry.speaker === "AI" && (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-800 flex items-center justify-center shadow-lg border border-purple-400/30 flex-shrink-0">
+                  <span className="text-xs font-bold text-white text-center leading-none">{entry.role ? entry.role[0] : "AI"}</span>
+                </div>
+              )}
+              
+              <div className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-6 shadow-2xl backdrop-blur-md ${
+                entry.speaker === "AI"
+                  ? "bg-indigo-950/50 border border-indigo-500/30 text-indigo-50 rounded-bl-sm"
+                  : "bg-blue-600/30 border border-blue-400/40 text-blue-50 rounded-br-sm"
+              }`}>
+                <p className={`text-xs font-black mb-3 tracking-widest uppercase flex items-center gap-2 ${entry.speaker === "AI" ? "text-purple-300" : "text-blue-300"}`}>
+                  {entry.role || entry.speaker}
+                </p>
+                <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90 whitespace-pre-wrap">{entry.content}</p>
+              </div>
+
+              {entry.speaker === "Human" && (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg border border-blue-400/30 flex-shrink-0">
+                  <Hand className="w-5 h-5 text-white" />
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {/* AI Typing Indicator */}
+        {currentSpeaker === "ai" && !aiBufferedText && (
+          <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-3 justify-start">
+             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
+                <span className="text-xs font-bold text-gray-400">AI</span>
+              </div>
+            <div className="max-w-[85%] rounded-3xl p-6 bg-gray-900/60 border border-gray-700/50 text-gray-300 rounded-bl-sm shadow-2xl backdrop-blur-md relative overflow-hidden">
+               {/* Shimmer effect */}
+              <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
+              <p className="text-xs font-black mb-3 tracking-widest uppercase text-gray-400 flex items-center gap-2">
+                {currentSpeakerRole ? `${currentSpeakerRole} is Thinking` : "AI is Thinking"}
+                <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
+              </p>
+              <p className="leading-relaxed text-sm italic font-medium text-gray-500">Preparing arguments and gathering evidence...</p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* AI Streaming Text */}
         {aiBufferedText && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-lg p-4 bg-muted text-foreground">
-              <p className="text-xs font-medium mb-1 opacity-70">AI (typing...)</p>
-              <p>{aiBufferedText}<span className="animate-pulse">|</span></p>
+          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex items-end gap-3 justify-start">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-800 flex items-center justify-center shadow-[0_0_15px_rgba(147,51,234,0.5)] border border-purple-400/50 flex-shrink-0 animate-pulse">
+                  <span className="text-xs font-bold text-white">AI</span>
+              </div>
+            <div className="max-w-[85%] rounded-3xl p-6 bg-indigo-950/50 border border-indigo-400/50 text-indigo-50 rounded-bl-sm shadow-[0_4px_30px_rgba(79,70,229,0.2)] backdrop-blur-md">
+              <p className="text-xs font-black mb-3 tracking-widest uppercase text-purple-300 flex items-center gap-2">
+                {currentSpeakerRole ? `${currentSpeakerRole} is Speaking` : "AI is Speaking"}
+                <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
+              </p>
+              <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90">{aiBufferedText}</p>
             </div>
-          </div>
+          </motion.div>
         )}
+        <div ref={transcriptEndRef} className="h-24" />
+      </main>
 
-        {isMatchComplete && (
-          <div className="text-center py-8">
-            <p className="text-xl font-semibold">Debate Complete!</p>
-            <p className="text-muted-foreground">Redirecting to results...</p>
-          </div>
-        )}
-        <div ref={transcriptEndRef} />
-      </div>
-
-      {/* Action bar */}
-      <div className="border-t p-4 flex items-center gap-3 max-w-4xl mx-auto w-full">
-        {/* POI offer */}
-        {poiWindowOpen && (
-          poiOpen ? (
-            <div className="flex gap-2 flex-1">
-              <Input
-                placeholder="Type your POI question (max 15 words)..."
-                value={poiText}
-                onChange={(e) => setPoiText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleOfferPOI()}
-                maxLength={100}
-              />
-              <Button variant="outline" onClick={() => setPoiOpen(false)}>Cancel</Button>
-              <Button onClick={handleOfferPOI}>Send POI</Button>
-            </div>
-          ) : (
-            <Button variant="outline" onClick={() => setPoiOpen(true)}>
-              🖐 Offer POI
+      {/* Control Deck (Glassmorphism Footer) */}
+      <footer className="mt-auto border-t border-indigo-500/20 bg-black/80 backdrop-blur-3xl p-6 z-20 pb-10 support-safe-area shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          
+          {/* Left Action: POI (Point of Information) */}
+          <div className="flex-1 flex justify-start w-full sm:w-auto">
+            <Button 
+              variant="outline" 
+              disabled={currentSpeaker !== 'ai'}
+              onClick={() => {
+                const poiText = window.prompt("Enter your Point of Information (e.g. 'On that point, wasn't the study proven flawed?'):");
+                if (poiText) {
+                    sendEvent({ action: "POI_OFFERED", text: poiText });
+                }
+              }}
+              className={`h-14 px-6 rounded-2xl font-bold tracking-wide transition-all w-full sm:w-auto shadow-lg ${
+                currentSpeaker !== 'ai'
+                  ? 'bg-transparent border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                  : 'bg-orange-500/10 border-orange-500/50 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]'
+              }`}
+            >
+              <Hand className="w-5 h-5 mr-2" />
+              Offer POI
             </Button>
-          )
-        )}
+          </div>
 
-        <Button onClick={handleEndTurn} className="ml-auto">
-          End Turn →
-        </Button>
-      </div>
+          {/* Microphone Central Button */}
+          <div className="flex-[2] flex justify-center w-full relative">
+            {/* Animated pulsing rings when recording */}
+            {isRecording && (
+                <motion.div 
+                    initial={{ scale: 0.8, opacity: 0.8 }}
+                    animate={{ scale: 1.5, opacity: 0 }}
+                    transition={{ repeat: Infinity, duration: 1.5 }}
+                    className="absolute inset-0 m-auto w-16 h-16 bg-emerald-500 rounded-full z-0"
+                />
+            )}
+            
+            <Button 
+              size="lg" 
+              onClick={toggleMic}
+              disabled={currentSpeaker === 'ai'}
+              className={`relative z-10 h-16 px-12 rounded-full shadow-2xl transition-all duration-300 font-black tracking-widest text-sm uppercase w-full sm:w-auto ${
+                currentSpeaker === 'ai' 
+                  ? 'bg-indigo-950/40 text-indigo-400/50 border border-indigo-900/50 cursor-not-allowed scale-95' 
+                  : isRecording
+                  ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white border-2 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.7)] hover:scale-105 active:scale-95'
+                  : 'bg-gradient-to-r from-emerald-400 to-emerald-600 text-black border-none shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:shadow-[0_0_40px_rgba(16,185,129,0.7)] hover:scale-105 active:scale-95'
+              }`}
+            >
+              {currentSpeaker === 'ai' ? (
+                <div className="flex items-center gap-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                  </span>
+                  AI holds floor
+                </div>
+              ) : isRecording ? (
+                <>
+                  <Mic className="w-6 h-6 mr-3 animate-pulse" />
+                  Listening... (Tap to Pause)
+                </>
+              ) : (
+                <>
+                  <Mic className="w-6 h-6 mr-3" />
+                  Your Turn — Tap to Speak
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Right Action: End Turn */}
+          <div className="flex-1 flex justify-end w-full sm:w-auto">
+             <Button 
+              variant="outline" 
+              disabled={currentSpeaker === 'ai'}
+              onClick={handleEndTurn}
+              className={`h-14 px-6 rounded-2xl font-bold tracking-wide transition-all w-full sm:w-auto shadow-lg ${
+                currentSpeaker === 'ai'
+                  ? 'bg-transparent border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
+                  : 'bg-white/5 border-white/20 text-white hover:bg-white/10 hover:border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.05)]'
+              }`}
+            >
+              End My Turn
+              <SkipForward className="w-5 h-5 ml-2 text-emerald-400" />
+            </Button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
