@@ -42,7 +42,7 @@ export default function MatchSetupPage() {
         { motion_text: motion, side, format, skill_level: skillLevel },
         session.access_token
       );
-      router.push(`/debate/${result.session_id}`);
+      router.push(`/debate/${result.session_id}/prep`);
     } catch (err) {
       toast.error("Failed to create match", { description: String(err) });
       setLoading(false);
