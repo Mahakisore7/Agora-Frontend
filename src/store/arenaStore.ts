@@ -6,6 +6,7 @@ export type EventType =
   | "POI_ACCEPTED"
   | "POI_DECLINED"
   | "AI_ERROR"
+  | "AI_THOUGHT_COMPLETE"
   | "MATCH_COMPLETE"
   | "TURN_CHANGED"
   | "TURN_STARTED";
@@ -60,6 +61,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   connected: false,
   matchId: null,
   currentSpeaker: null,
+  currentSpeakerRole: null,
   aiBufferedText: "",
   transcript: [],
   isMatchComplete: false,
