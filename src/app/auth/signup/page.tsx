@@ -51,7 +51,7 @@ export default function SignupPage() {
       options: { redirectTo },
     });
     if (error) {
-      toast({ title: `${provider} signup failed`, description: error.message, variant: "destructive" });
+      toast.error(`${provider} signup failed`, { description: error.message });
       setOauthLoading(null);
     }
   };
