@@ -83,22 +83,26 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-black px-4 relative overflow-hidden text-white">
+      {/* Background ambient glow */}
+      <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-900/20 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/20 blur-[120px] rounded-full pointer-events-none" />
+
+      <Card className="w-full max-w-md relative z-10 border-indigo-500/20 bg-indigo-950/40 backdrop-blur-3xl shadow-2xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Create your account</CardTitle>
-          <CardDescription>Start debating with AI today</CardDescription>
+          <CardTitle className="text-3xl font-black bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent pb-2">Create your account</CardTitle>
+          <CardDescription className="text-indigo-300/80 font-medium">Start debating with AI today</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
 
           {/* OAuth buttons */}
-          <div className="space-y-2">
-            <Button variant="outline" className="w-full gap-3"
+          <div className="space-y-3">
+            <Button variant="outline" className="w-full gap-3 h-12 bg-white/5 border-white/10 hover:bg-white/10 transition-colors text-slate-200"
               onClick={() => handleOAuth("google")} disabled={!!oauthLoading}>
               <GoogleIcon />
               {oauthLoading === "google" ? "Redirecting..." : "Continue with Google"}
             </Button>
-            <Button variant="outline" className="w-full gap-3"
+            <Button variant="outline" className="w-full gap-3 h-12 bg-white/5 border-white/10 hover:bg-white/10 transition-colors text-slate-200"
               onClick={() => handleOAuth("github")} disabled={!!oauthLoading}>
               <GitHubIcon />
               {oauthLoading === "github" ? "Redirecting..." : "Continue with GitHub"}
@@ -108,33 +112,37 @@ export default function SignupPage() {
           {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
+              <span className="w-full border-t border-indigo-500/20" />
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">or sign up with email</span>
+            <div className="relative flex justify-center text-xs uppercase font-bold tracking-widest">
+              <span className="bg-indigo-950 px-3 text-indigo-400/60 rounded-full">Or sign up with email</span>
             </div>
           </div>
 
           {/* Email form */}
-          <form onSubmit={handleSignup} className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
+          <form onSubmit={handleSignup} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-indigo-300">Email</Label>
               <Input id="email" type="email" value={email}
-                onChange={(e) => setEmail(e.target.value)} required />
+                onChange={(e) => setEmail(e.target.value)} required 
+                className="bg-black/50 border-indigo-500/30 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500" 
+              />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="password">Password</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-indigo-300">Password</Label>
               <Input id="password" type="password" value={password}
-                onChange={(e) => setPassword(e.target.value)} required />
+                onChange={(e) => setPassword(e.target.value)} required 
+                className="bg-black/50 border-indigo-500/30 text-white focus-visible:ring-indigo-500" 
+              />
             </div>
-            <Button type="submit" className="w-full" disabled={loading || !!oauthLoading}>
+            <Button type="submit" className="w-full h-12 font-bold bg-indigo-600 hover:bg-indigo-700 shadow-[0_0_20px_rgba(79,70,229,0.3)] transition-all mt-2" disabled={loading || !!oauthLoading}>
               {loading ? "Creating account..." : "Create account"}
             </Button>
           </form>
 
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-center text-sm text-slate-400 font-medium">
             Already have an account?{" "}
-            <Link href="/auth/login" className="text-primary hover:underline font-medium">Sign in</Link>
+            <Link href="/auth/login" className="text-indigo-400 hover:text-indigo-300 hover:underline font-bold">Sign in</Link>
           </p>
         </CardContent>
       </Card>
