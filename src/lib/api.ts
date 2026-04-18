@@ -110,9 +110,13 @@ interface CreateMatchPayload {
 }
 
 interface CreateMatchResponse {
-  session_id: string;
-  case_prep_id: string;
-  message: string;
+  match_id: string;
+  motion: string;
+  status: string;
+  created_by: string;
+  your_role: string;
+  your_side?: string;
+  your_team?: string;
 }
 
 /**
@@ -144,7 +148,8 @@ export async function createMatch(
     throw new Error(error.detail || error.message || "Failed to create match");
   }
 
-  return res.json();
+  const json = await res.json();
+  return json.data;
 }
 
 // ============================================================================
@@ -185,7 +190,8 @@ export async function getCasePrep(
     throw new Error(error.detail || "Case prep not found");
   }
 
-  return res.json();
+  const json = await res.json();
+  return json.data;
 }
 
 // ============================================================================
@@ -208,7 +214,8 @@ export async function getDebateResults(sessionId: string, token: string) {
     throw new Error(
       "Results not available yet. Match may still be processing."
     );
-  return res.json();
+  const json = await res.json();
+  return json.data;
 }
 
 // ============================================================================
@@ -236,5 +243,6 @@ export async function getMatchHistory(
     }
   );
   if (!res.ok) throw new Error("Failed to fetch match history");
-  return res.json();
+  const json = await res.json();
+  return json.data;
 }

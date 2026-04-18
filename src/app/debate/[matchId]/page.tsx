@@ -37,7 +37,7 @@ function ArenaInner() {
   }, [matchId, session?.access_token]);
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [transcript, aiBufferedText]);
 
   useEffect(() => {
@@ -76,14 +76,26 @@ function ArenaInner() {
   };
 
   const handleEndTurn = () => {
-    if (isRecording) toggleMic();
-    sendEvent({ action: "END_TURN" });
+    console.log("[Arena] Requesting end turn...");
+    try {
+      sendEvent({ action: "END_TURN" });
+    } catch (err) {
+      console.error("[Arena] Failed to send END_TURN event", err);
+    }
+    
+    if (isRecording) {
+      try {
+        toggleMic();
+      } catch (err) {
+        console.error("[Arena] Error stopping mic silently ignored", err);
+      }
+    }
   };
 
   const roles = FORMAT_ROLES[format] || FORMAT_ROLES.ap;
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col relative overflow-hidden">
+    <div className="h-[100dvh] bg-black text-white flex flex-col relative overflow-hidden">
       {/* Background ambient glow */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-900/30 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-900/30 blur-[120px] rounded-full pointer-events-none" />
@@ -340,7 +352,7 @@ function ArenaInner() {
 export default function LiveArenaPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="h-[100dvh] bg-black flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     }>

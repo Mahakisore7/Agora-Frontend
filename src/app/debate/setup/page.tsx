@@ -136,7 +136,7 @@ export default function MatchSetupPage() {
        * We pass `format` as a query parameter so the prep page
        * knows which endpoint to call for fetching case prep.
        */
-      router.push(`/debate/${result.session_id}/prep?format=${format}`);
+      router.push(`/debate/${result.match_id}/prep?format=${format}`);
     } catch (err) {
       toast.error("Failed to create match", { description: String(err) });
       setLoading(false);
