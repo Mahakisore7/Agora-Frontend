@@ -1,24 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { User, Mail, Building, Globe, Edit3, Loader2 } from "lucide-react";
+import { User, Mail, Building, Globe, Edit3, Loader2, Camera, Shield, Star, BarChart3, Trophy, CheckCircle, LogOut } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function ProfilePage() {
   const { session, user } = useAuth();
   const router = useRouter();
-  const supabase = createBrowserSupabaseClient();
+  const supabase = createClient();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     displayName: "",
@@ -40,6 +43,7 @@ export default function ProfilePage() {
         institution: user.user_metadata?.institution || "",
         country: user.user_metadata?.country || "",
       });
+      setAvatarUrl(user.user_metadata?.avatar_url || null);
     }
   }, [session, user, router]);
 
@@ -58,6 +62,7 @@ export default function ProfilePage() {
       if (error) throw error;
       
       setMessage({ type: 'success', text: 'Profile updated successfully.' });
+      setTimeout(() => setMessage(null), 3000);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Failed to update profile.' });
     } finally {
@@ -65,164 +70,315 @@ export default function ProfilePage() {
     }
   };
 
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      // Upload to Supabase Storage
+      const filePath = `avatars/${user.id}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: publicData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const url = publicData.publicUrl;
+      setAvatarUrl(url);
+
+      // Save to user metadata
+      await supabase.auth.updateUser({ data: { avatar_url: url } });
+      setMessage({ type: "success", text: "Photo successfully updated." });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      // Fallback: use local object URL if storage isn't configured
+      const objectUrl = URL.createObjectURL(file);
+      setAvatarUrl(objectUrl);
+      setMessage({ type: "success", text: "Photo temporarily updated locally." });
+      setTimeout(() => setMessage(null), 3000);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/auth/login";
+  };
+
   if (!user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
+  const initials = formData.displayName
+    ? formData.displayName.substring(0, 2).toUpperCase()
+    : user.email?.substring(0, 2).toUpperCase() || "??";
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black text-white flex flex-col relative overflow-hidden">
+      {/* Background Orbs */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/20 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-purple-600/20 rounded-full blur-[100px]" />
+      </div>
+
       {/* Navbar */}
-      <nav className="border-b px-6 py-4 flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur z-40">
+      <nav className="border-b border-white/5 px-6 py-4 flex items-center justify-between sticky top-0 bg-background/50 backdrop-blur-xl z-40">
         <div className="flex items-center gap-6">
-          <Link href="/dashboard" className="text-xl font-black tracking-tighter">
-            ⚖️ <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Agora</span>
+          <Link href="/dashboard" className="text-xl font-black tracking-tighter flex items-center gap-2 drop-shadow-[0_0_15px_rgba(99,102,241,0.5)]">
+            <span className="text-2xl">⚖️</span>
+            <span className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Agora</span>
           </Link>
-          <div className="hidden sm:flex items-center gap-4 text-sm font-medium">
-            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">Dashboard</Link>
-            <Link href="/history" className="text-muted-foreground hover:text-foreground transition-colors">History</Link>
-            <Link href="/profile" className="text-primary">Profile</Link>
+          <div className="hidden sm:flex items-center gap-6 text-sm font-bold tracking-wide">
+            <Link href="/dashboard" className="text-slate-400 hover:text-white transition-colors">Dashboard</Link>
+            <Link href="/history" className="text-slate-400 hover:text-white transition-colors">History</Link>
+            <Link href="/profile" className="text-indigo-400 border-b-2 border-indigo-400 pb-1">Profile</Link>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-slate-300 hidden sm:block">{user.email}</span>
-          <form action="/auth/signout" method="post">
-            <Button variant="secondary" size="sm" type="submit" className="font-bold">Sign out</Button>
-          </form>
+          <span className="text-sm font-medium text-slate-300 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 hidden sm:block">
+            {user.email}
+          </span>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSignOut}
+            className="border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign Out
+          </Button>
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-4xl mx-auto p-4 sm:p-8 flex flex-col items-center">
+      <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-8 z-10 flex flex-col pt-12 pb-24">
         
-        <div className="w-full mb-8">
-          <h1 className="text-4xl font-extrabold tracking-tight">Your Profile</h1>
-          <p className="text-muted-foreground mt-1 text-lg">Manage your personal information and debating credentials.</p>
-        </div>
-
-        <div className="w-full grid md:grid-cols-3 gap-8">
-          
-          {/* Avatar / Summary Column */}
-          <div className="md:col-span-1 space-y-6">
-            <Card className="border-border/50 bg-card/60 backdrop-blur block items-center text-center p-6">
-              <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-indigo-500/20 text-4xl font-black text-white mb-4">
-                {formData.displayName.substring(0, 1).toUpperCase() || "A"}
-              </div>
-              <h2 className="text-xl font-bold truncate px-2">{formData.displayName || "Debater"}</h2>
-              <Badge variant="secondary" className="mt-2 text-xs uppercase tracking-widest">{formData.institution || "Independent"}</Badge>
-            </Card>
-
-            <Card className="border-border/50 bg-card/60">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-black uppercase tracking-widest text-muted-foreground">Account Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                <div className="flex justify-between border-b border-border pb-2">
-                  <span className="text-muted-foreground">Verification</span>
-                  <Badge variant="outline" className="text-emerald-400 border-emerald-500/30">Verified</Badge>
-                </div>
-                <div className="flex justify-between border-b border-border pb-2">
-                  <span className="text-muted-foreground">Joined</span>
-                  <span className="font-medium">{new Date(user.created_at).toLocaleDateString()}</span>
-                </div>
-              </CardContent>
-            </Card>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4"
+        >
+          <div>
+            <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-r from-white via-indigo-200 to-indigo-400 bg-clip-text text-transparent mb-2">
+              Debater Profile
+            </h1>
+            <p className="text-indigo-200/60 text-lg font-medium">Manage your professional persona and debate metrics.</p>
           </div>
+          
+          <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 text-xs font-bold uppercase tracking-widest hidden md:flex">
+            <Shield className="w-4 h-4 mr-2" />
+            Verified Account
+          </Badge>
+        </motion.div>
 
-          {/* Edit Form Column */}
-          <div className="md:col-span-2">
-            <Card className="border-border/50 bg-card/60 backdrop-blur h-full">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Edit3 className="w-5 h-5 text-indigo-400" />
-                  Edit Profile
-                </CardTitle>
-                <CardDescription>
-                  Update your public information. This will be shown to your opponents in the arena.
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-6">
-                
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-muted-foreground">Email Address</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                    <Input id="email" value={user.email} disabled className="pl-9 bg-muted/50 border-border/50 opacity-100" />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Connected via Supabase Auth</p>
+        <div className="w-full grid md:grid-cols-12 gap-8">
+          
+          {/* Left Column: Avatar & Summary */}
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="md:col-span-4 space-y-6"
+          >
+            {/* Identity Card */}
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-8 flex flex-col items-center text-center relative overflow-hidden group">
+              
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
+              
+              {/* Avatar Upload */}
+              <div className="relative cursor-pointer" onClick={() => fileRef.current?.click()}>
+                <div className="w-36 h-36 mx-auto rounded-full overflow-hidden border-[3px] border-indigo-500/30 
+                  bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center 
+                  shadow-[0_0_40px_rgba(99,102,241,0.3)] group-hover:border-indigo-400 transition-all duration-300 z-10 relative">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-4xl font-black text-white">{initials}</span>
+                  )}
                 </div>
+                
+                {/* Upload Overlay */}
+                <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20 backdrop-blur-sm">
+                  {isUploadingPhoto 
+                    ? <Loader2 className="w-8 h-8 text-white animate-spin" />
+                    : <Camera className="w-8 h-8 text-white" />
+                  }
+                </div>
+                
+                {/* Status indicator bubble */}
+                <div className="absolute bottom-1 right-3 w-6 h-6 bg-emerald-500 rounded-full border-4 border-gray-950 z-30 shadow-lg" />
+              </div>
+              
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoUpload}
+              />
 
-                <Separator className="bg-border/50" />
+              <h2 className="text-2xl font-black mt-6 tracking-tight">{formData.displayName || "Anonymous Debater"}</h2>
+              <p className="text-indigo-300/80 text-sm font-medium mt-1 uppercase tracking-widest">{formData.institution || "Independent"}</p>
+              
+              <div className="flex gap-2 mt-6">
+                <Badge className="bg-white/5 border border-white/10 text-slate-300 font-semibold px-4 flex gap-2">
+                  <Star className="w-3.5 h-3.5 text-yellow-500" /> Pro
+                </Badge>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-6">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Debate Statistics</h3>
+              <div className="space-y-4">
+                {[
+                  { label: "Matches Played", value: "0", icon: BarChart3, color: "text-indigo-400" },
+                  { label: "Win Rate", value: "0%", icon: Trophy, color: "text-yellow-400" },
+                  { label: "Member Since", value: new Date(user.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }), icon: Shield, color: "text-emerald-400" },
+                ].map(({ label, value, icon: Icon, color }) => (
+                  <div key={label} className="flex items-center justify-between group hover:bg-white/5 p-2 rounded-xl transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/5">
+                        <Icon className={`w-4 h-4 ${color}`} />
+                      </div>
+                      <span className="text-sm font-medium text-slate-400">{label}</span>
+                    </div>
+                    <span className="font-bold">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Right Column: Edit Form */}
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+            className="md:col-span-8"
+          >
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-md p-8 h-full flex flex-col relative overflow-hidden">
+              
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Personal Information</h2>
+                  <p className="text-sm text-slate-400 font-medium">This information will be displayed to your opponents.</p>
+                </div>
+              </div>
+
+              <div className="space-y-6 flex-1">
+                
+                {/* Email Read-Only */}
+                <div className="space-y-2 relative">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Email Address</label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-hover:text-indigo-400 transition-colors" />
+                    <Input 
+                      value={user.email} 
+                      disabled 
+                      className="pl-12 h-12 bg-white/5 border-white/10 text-slate-400 rounded-xl font-medium" 
+                    />
+                  </div>
+                </div>
 
                 <div className="grid sm:grid-cols-2 gap-6">
+                  {/* Display Name */}
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="displayName">Display Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Display Name</label>
+                    <div className="relative group">
+                      <User className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                       <Input 
-                        id="displayName" 
                         value={formData.displayName}
                         onChange={(e) => setFormData({...formData, displayName: e.target.value})}
-                        className="pl-9"
+                        className="pl-12 h-12 bg-white/5 border-white/10 text-white rounded-xl font-bold placeholder:text-slate-600 focus:border-indigo-500/50 focus:ring-indigo-500/20 transition-all text-lg"
                         placeholder="John Doe" 
                       />
                     </div>
                   </div>
 
+                  {/* Institution */}
                   <div className="space-y-2">
-                    <Label htmlFor="institution">Institution / University</Label>
-                    <div className="relative">
-                      <Building className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Institution</label>
+                    <div className="relative group">
+                      <Building className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-purple-400 transition-colors" />
                       <Input 
-                        id="institution" 
                         value={formData.institution}
                         onChange={(e) => setFormData({...formData, institution: e.target.value})}
-                        className="pl-9"
-                        placeholder="Oxford Debating Union" 
+                        className="pl-12 h-12 bg-white/5 border-white/10 text-white rounded-xl font-medium placeholder:text-slate-600 focus:border-purple-500/50 transition-all"
+                        placeholder="Oxford Union" 
                       />
                     </div>
                   </div>
 
+                  {/* Country */}
                   <div className="space-y-2">
-                    <Label htmlFor="country">Country</Label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Country</label>
+                    <div className="relative group">
+                      <Globe className="absolute left-4 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-emerald-400 transition-colors" />
                       <Input 
-                        id="country" 
                         value={formData.country}
                         onChange={(e) => setFormData({...formData, country: e.target.value})}
-                        className="pl-9"
+                        className="pl-12 h-12 bg-white/5 border-white/10 text-white rounded-xl font-medium placeholder:text-slate-600 focus:border-emerald-500/50 transition-all"
                         placeholder="United Kingdom" 
                       />
                     </div>
                   </div>
                 </div>
 
-                {message && (
-                  <div className={`p-4 rounded-xl text-sm font-medium ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                    {message.text}
-                  </div>
-                )}
-              </CardContent>
+              </div>
 
-              <CardFooter className="bg-background/20 border-t border-border/50 mt-6 py-4 flex justify-end">
+              {/* Status Message */}
+              <AnimatePresence>
+                {message && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className={`mt-6 p-4 rounded-xl flex items-center gap-3 font-semibold text-sm ${
+                      message.type === 'success' 
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}
+                  >
+                    <CheckCircle className="w-5 h-5 flex-shrink-0" />
+                    {message.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Action Buttons */}
+              <div className="mt-8 pt-6 border-t border-white/10 flex justify-end">
                 <Button 
                   onClick={handleSave} 
                   disabled={isSaving}
-                  className="bg-indigo-600 hover:bg-indigo-700 font-bold px-8 shadow-lg shadow-indigo-600/20"
+                  className="h-12 px-8 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] transition-all duration-300 text-base"
                 >
-                  {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {isSaving ? "Saving..." : "Save Changes"}
+                  {isSaving ? (
+                    <><Loader2 className="w-5 h-5 mr-3 animate-spin" /> Saving Changes...</>
+                  ) : (
+                    <><Edit3 className="w-5 h-5 mr-3" /> Save Profile</>
+                  )}
                 </Button>
-              </CardFooter>
-            </Card>
-          </div>
-        </div>
+              </div>
 
+            </div>
+          </motion.div>
+
+        </div>
       </main>
     </div>
   );

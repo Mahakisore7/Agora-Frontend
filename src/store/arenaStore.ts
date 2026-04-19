@@ -74,10 +74,14 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
-      console.log("[Arena] WebSocket connected");
-      set({ connected: true });
-      // Immediately kick off the debate
-      socket.send(JSON.stringify({ action: "START_MATCH" }));
+      console.log("[Arena] WebSocket connected — waiting for user to start match.");
+      // Ensure we only update state if this is still the active socket
+      if (get().socket === socket) {
+        set({ connected: true });
+        // We can safely send START_MATCH here because this store is only mounted
+        // within the actual Live Arena layout, meaning the user is ready.
+        socket.send(JSON.stringify({ action: "START_MATCH" }));
+      }
     };
 
     socket.onmessage = (event) => {
@@ -127,15 +131,20 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     socket.onerror = (e) => console.error("[Arena] WS Error:", e);
     socket.onclose = () => {
       console.log("[Arena] WebSocket disconnected");
-      set({ connected: false, socket: null });
+      if (get().socket === socket) {
+        set({ connected: false, socket: null });
+      }
     };
 
     set({ socket, matchId });
   },
 
   disconnect: () => {
-    get().socket?.close();
-    set({ socket: null, connected: false });
+    const { socket } = get();
+    if (socket) {
+      socket.close();
+      set({ socket: null, connected: false });
+    }
   },
 
   getSocket: () => {

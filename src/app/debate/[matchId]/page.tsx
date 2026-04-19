@@ -6,6 +6,7 @@ import { useAuth } from "@/components/providers/AuthProvider";
 import { useArenaStore } from "@/store/arenaStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ProfileDrawer } from "@/components/ui/profile-drawer";
 import { Mic, SkipForward, Hand, Users, Target } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FORMAT_ROLES, ROLE_LABELS, ROLE_TO_SIDE, DebateFormat } from "@/lib/api";
@@ -15,12 +16,13 @@ function ArenaInner() {
   const searchParams = useSearchParams();
   const format = (searchParams.get("format") as DebateFormat) || "ap";
   
-  const { session } = useAuth();
+  const { session, user } = useAuth();
   const router = useRouter();
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   
   // Microphone Tracking
   const [isRecording, setIsRecording] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
 
   const {
@@ -35,6 +37,9 @@ function ArenaInner() {
     }
     return () => disconnect();
   }, [matchId, session?.access_token]);
+
+    // START_MATCH is now handled natively within arenaStore upon successful WebSocket onopen.
+    // We no longer trigger it here to avoid React StrictMode duplicate events.
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -118,6 +123,34 @@ function ArenaInner() {
         <Badge variant={connected ? "default" : "destructive"} className={`hidden sm:flex px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${connected ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50" : "bg-red-500/20 text-red-400 border border-red-500/50"}`}>
           {connected ? "● Server Active" : "○ Disconnected"}
         </Badge>
+
+        {/* Profile Avatar Button */}
+        <button
+          onClick={() => setProfileOpen(true)}
+          className="w-10 h-10 rounded-full overflow-hidden border-2 border-indigo-500/40
+            hover:border-indigo-400/70 transition-all shadow-[0_0_12px_rgba(99,102,241,0.3)]
+            hover:shadow-[0_0_20px_rgba(99,102,241,0.5)] flex-shrink-0 bg-indigo-950 flex items-center justify-center"
+          title="Open Profile"
+        >
+          {user?.user_metadata?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img 
+              src={user.user_metadata.avatar_url} 
+              alt="Profile" 
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // If external blob/URL fails, fallback to initials
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement!.innerHTML = `<span class="text-xs font-black text-white">${(user?.user_metadata?.display_name || user?.email || "?").substring(0, 2).toUpperCase()}</span>`;
+              }} 
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600
+              flex items-center justify-center text-xs font-black text-white">
+              {(user?.user_metadata?.display_name || user?.email || "?").substring(0, 2).toUpperCase()}
+            </div>
+          )}
+        </button>
       </header>
 
       <div className="flex-1 flex overflow-hidden z-10 w-full max-w-7xl mx-auto">
@@ -345,6 +378,9 @@ function ArenaInner() {
           </footer>
         </main>
       </div>
+
+      {/* Profile Slide-out Drawer */}
+      <ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }
