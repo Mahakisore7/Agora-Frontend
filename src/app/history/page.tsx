@@ -138,17 +138,20 @@ function MatchList({ matches }: { matches: any[] }) {
                 <>
                   <div className="flex items-center gap-4 sm:mb-1">
                     <div className="text-right">
-                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-0.5">Your Score</p>
-                      <p className="font-mono text-xl font-black">—</p>
+                      <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mb-0.5">Verdict</p>
+                      <p className={`font-mono text-sm font-black ${
+                        match.verdict === 'Government' ? 'text-blue-400' :
+                        match.verdict === 'Opposition' ? 'text-red-400' : 'text-slate-400'
+                      }`}>{match.verdict || '—'}</p>
                     </div>
                   </div>
-                  <Button asChild variant="outline" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Link href={`/results/${match.id}`}>Full Details</Link>
+                  <Button asChild variant="outline" size="sm" className="border-indigo-500/30 text-indigo-300 hover:text-white hover:bg-indigo-900/40 text-xs gap-1">
+                    <Link href={`/results/${match.id}?format=${match.format || 'ap'}`}>View Results →</Link>
                   </Button>
                 </>
               ) : (
                 <Button asChild className="bg-indigo-500 hover:bg-indigo-600 text-white w-full sm:w-auto">
-                  <Link href={`/debate/${match.id}?format=${match.format}`}>Rejoin Array</Link>
+                  <Link href={`/debate/${match.id}?format=${match.format || 'ap'}`}>Rejoin Arena</Link>
                 </Button>
               )}
             </div>

@@ -28,7 +28,8 @@ function ArenaInner() {
   const {
     connect, disconnect, sendEvent, getSocket,
     connected, transcript, aiBufferedText,
-    isMatchComplete, currentSpeaker, currentSpeakerRole
+    isMatchComplete, currentSpeaker, currentSpeakerRole,
+    adjudicationComplete, adjudicationMessage
   } = useArenaStore();
 
   useEffect(() => {
@@ -45,11 +46,22 @@ function ArenaInner() {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [transcript, aiBufferedText]);
 
+  // When the AI adjudication pipeline finishes (~40-60s after match ends),
+  // redirect to the results dashboard with the format param preserved.
   useEffect(() => {
-    if (isMatchComplete) {
-      setTimeout(() => router.push(`/results/${matchId}`), 2000);
+    if (adjudicationComplete) {
+      router.push(`/results/${matchId}?format=${format}`);
     }
-  }, [isMatchComplete, matchId, router]);
+  }, [adjudicationComplete, matchId, format, router]);
+
+  // Fallback: if match ends but adjudication takes too long, redirect after 90s
+  useEffect(() => {
+    if (!isMatchComplete) return;
+    const timer = setTimeout(() => {
+      router.push(`/results/${matchId}?format=${format}`);
+    }, 90000);
+    return () => clearTimeout(timer);
+  }, [isMatchComplete, matchId, format, router]);
 
   // Production-Grade MediaRecorder Streaming
   const toggleMic = async () => {
@@ -104,6 +116,58 @@ function ArenaInner() {
       {/* Background ambient glow */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-900/30 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-purple-900/30 blur-[120px] rounded-full pointer-events-none" />
+
+      {/* ── Adjudication Overlay ─────────────────────────────────────── */}
+      {/* Shows after all speeches finish while the 5-phase pipeline runs (~40-60s) */}
+      <AnimatePresence>
+        {isMatchComplete && !adjudicationComplete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-[#050510]/90 backdrop-blur-sm flex flex-col items-center justify-center gap-6 text-center px-6"
+          >
+            {/* Spinner ring */}
+            <div className="relative w-20 h-20">
+              <div className="absolute inset-0 rounded-full border-2 border-indigo-900" />
+              <motion.div
+                className="absolute inset-0 rounded-full border-2 border-t-indigo-400 border-r-transparent border-b-transparent border-l-transparent"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <svg className="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2M5.636 5.636l1.414 1.414m9.9 9.9 1.414 1.414M3 12h2m14 0h2M5.636 18.364l1.414-1.414m9.9-9.9 1.414-1.414" />
+                </svg>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-black text-white mb-2">AI Adjudicator Deliberating</h2>
+              <p className="text-slate-400 text-sm max-w-sm leading-relaxed">
+                {adjudicationMessage || "All speeches complete. The 5-phase evaluation pipeline is running..."}
+              </p>
+            </div>
+
+            {/* Phase progress pills */}
+            <div className="flex gap-2 flex-wrap justify-center">
+              {["Clashes", "WCM Matrix", "WUDC Pillars", "Speakers", "Verdict"].map((phase, i) => (
+                <motion.div
+                  key={phase}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.1 }}
+                  className="text-xs px-3 py-1.5 rounded-full border border-indigo-500/20 bg-indigo-950/40 text-indigo-300"
+                >
+                  {i + 1}. {phase}
+                </motion.div>
+              ))}
+            </div>
+
+            <p className="text-xs text-slate-600 mt-2">You will be redirected automatically when results are ready</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <header className="border-b border-indigo-500/20 bg-indigo-950/40 backdrop-blur-3xl p-5 flex items-center justify-between z-20 shadow-2xl relative">
         <div className="flex items-center gap-6">
