@@ -9,7 +9,10 @@ export type EventType =
   | "AI_THOUGHT_COMPLETE"
   | "MATCH_COMPLETE"
   | "TURN_CHANGED"
-  | "TURN_STARTED";
+  | "TURN_STARTED"
+  | "ADJUDICATION_STARTED"
+  | "ADJUDICATION_COMPLETE"
+  | "ADJUDICATION_ERROR";
 
 export interface ArenaEvent {
   event: EventType;
@@ -45,6 +48,10 @@ interface ArenaState {
   audioQueue: ArrayBuffer[];
   isPlayingAudio: boolean;
 
+  // Adjudication state — set when the 5-phase pipeline finishes
+  adjudicationComplete: boolean;
+  adjudicationMessage: string | null; // "Phase 1/5: Extracting clashes..." etc.
+
   // Actions
   connect: (matchId: string, token: string) => void;
   disconnect: () => void;
@@ -68,6 +75,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   verdict: null,
   audioQueue: [],
   isPlayingAudio: false,
+  adjudicationComplete: false,
+  adjudicationMessage: null,
 
   connect: (matchId, token) => {
     const wsUrl = `${process.env.NEXT_PUBLIC_WS_BASE_URL}/ws/live?match_id=${matchId}&token=${token}`;
@@ -120,6 +129,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
            }
         } else if (data.event === "MATCH_COMPLETE") {
           setMatchComplete(data);
+          set({ adjudicationMessage: "All speeches done. AI adjudication starting..." });
+        } else if (data.event === "ADJUDICATION_STARTED") {
+          console.log("[Arena] Adjudication pipeline started.");
+          set({ adjudicationMessage: "AI is deliberating... (Phase 1/5)" });
+        } else if (data.event === "ADJUDICATION_COMPLETE") {
+          console.log("[Arena] Adjudication complete! Verdict:", (data as any).verdict);
+          set({ adjudicationComplete: true, adjudicationMessage: null });
+        } else if (data.event === "ADJUDICATION_ERROR") {
+          console.error("[Arena] Adjudication failed:", (data as any).error);
+          set({ adjudicationMessage: "Adjudication encountered an error." });
         } else if (data.event === "AI_ERROR") {
           console.error("[Arena] AI Error:", data.error_message);
         }

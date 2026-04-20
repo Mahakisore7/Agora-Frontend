@@ -195,27 +195,59 @@ export async function getCasePrep(
 }
 
 // ============================================================================
-// DEBATE RESULTS
+// DEBATE RESULTS & ADJUDICATION
 // ============================================================================
 
 /**
- * Fetch debate results (scores, clash analysis, feedback).
+ * Fetch the full adjudication result for a completed match.
  *
- * URL: GET /api/v1/debates/{sessionId}/results
+ * URL: GET /api/v1/{format}/matches/{matchId}/adjudication
  *
- * Called after a match completes. The adjudication agent scores
- * each speaker on content, strategy, style, structure, and POI handling.
+ * The adjudication result contains:
+ * - clashes: Macro-level argument clashes (Phase 1)
+ * - wcm_matrix: Weighted Clash Matrix with scores (Phase 2)
+ * - pillar_breakdown: WUDC pillar scores per team (Phase 3)
+ * - speaker_scores: Individual speaker grades 0-100 (Phase 4)
+ * - summary: Final adjudication statement + key decisions (Phase 5)
  */
-export async function getDebateResults(sessionId: string, token: string) {
-  const res = await fetch(`${API_BASE}/api/v1/debates/${sessionId}/results`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export async function getDebateResults(
+  matchId: string,
+  token: string,
+  format: DebateFormat = "ap"
+) {
+  const res = await fetch(
+    `${API_BASE}/api/v1/${format}/matches/${matchId}/adjudication`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
   if (!res.ok)
     throw new Error(
-      "Results not available yet. Match may still be processing."
+      "Results not available yet. Adjudication may still be processing."
     );
-  const json = await res.json();
-  return json.data;
+  return await res.json(); // Returns raw AdjudicationResult JSON
+}
+
+/**
+ * Poll adjudication processing status.
+ *
+ * URL: GET /api/v1/{format}/matches/{matchId}/adjudication/status
+ *
+ * Returns:
+ *   { status: "processing" | "completed" | "error", verdict?, gov_score?, opp_score? }
+ *
+ * Use this to show a loading state on the results page while
+ * the 5-phase pipeline runs (~40-60 seconds).
+ */
+export async function getAdjudicationStatus(
+  matchId: string,
+  token: string,
+  format: DebateFormat = "ap"
+) {
+  const res = await fetch(
+    `${API_BASE}/api/v1/${format}/matches/${matchId}/adjudication/status`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) return { status: "error", message: "Failed to check status" };
+  return await res.json();
 }
 
 // ============================================================================
