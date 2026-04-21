@@ -11,7 +11,9 @@ export default async function DashboardPage() {
 
   if (!session) redirect("/auth/login");
 
-  const displayName = session.user.email?.split("@")[0] ?? "Debater";
+  const userMetadata = session.user.user_metadata || {};
+  const displayName = userMetadata.display_name || session.user.email?.split("@")[0] || "Debater";
+  const avatarUrl = userMetadata.avatar_url;
   const token = session.access_token;
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -24,25 +26,29 @@ export default async function DashboardPage() {
         cache: 'no-store'
       });
       if (!res.ok) return [];
-      const data = await res.json();
-      // append the format to each match so we know where it came from
-      return (data.matches || []).map((m: any) => ({ ...m, format }));
+      const json = await res.json();
+      const matches = json.data?.matches || json.matches || [];
+      const total = json.data?.total ?? json.total ?? 0;
+      return { 
+        matches: matches.map((m: any) => ({ ...m, format })),
+        total 
+      };
     } catch {
-      return [];
+      return { matches: [], total: 0 };
     }
   };
 
-  const [apMatches, bpMatches] = await Promise.all([
+  const [apRes, bpRes] = await Promise.all([
     fetchHistory("ap"),
     fetchHistory("bp")
   ]);
 
-  const allMatches = [...apMatches, ...bpMatches].sort((a, b) => 
+  const allMatches = [...apRes.matches, ...bpRes.matches].sort((a, b) => 
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
-  // Compute real stats
-  const totalDebates = allMatches.length;
+  // Compute real stats from the backend 'total' fields instead of array length
+  const totalDebates = apRes.total + bpRes.total;
   // TODO: Add actual scores when results API is fully hooked up
   // For now, we stub scores but show true debate counts
   const avgScore = totalDebates > 0 ? "—" : "—"; 
@@ -65,9 +71,22 @@ export default async function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-slate-300 hidden sm:block">{session.user.email}</span>
+          <Link href="/profile" className="flex items-center gap-3 group">
+            <span className="text-sm font-medium text-slate-300 hidden sm:block group-hover:text-white transition-colors">
+              {displayName}
+            </span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-white/10 overflow-hidden shadow-lg shadow-indigo-500/20">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-white">{displayName.substring(0, 2).toUpperCase()}</span>
+              )}
+            </div>
+          </Link>
           <form action="/auth/signout" method="post">
-            <Button variant="secondary" size="sm" type="submit" className="font-bold">Sign out</Button>
+            <Button variant="ghost" size="sm" type="submit" className="text-muted-foreground hover:text-white font-bold h-8">
+              Sign out
+            </Button>
           </form>
         </div>
       </nav>

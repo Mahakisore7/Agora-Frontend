@@ -30,6 +30,7 @@ export default function ProfilePage() {
   });
 
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [stats, setStats] = useState({ matchesPlayed: 0, winRate: 0 });
 
   useEffect(() => {
     if (!session) {
@@ -46,6 +47,42 @@ export default function ProfilePage() {
       setAvatarUrl(user.user_metadata?.avatar_url || null);
     }
   }, [session, user, router]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const fetchStats = async () => {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+      const token = session.access_token;
+      
+      const fetchFormat = async (format: string) => {
+        try {
+          const res = await fetch(`${API_BASE}/api/v1/${format}/matches?skip=0&limit=100`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (!res.ok) return [];
+          const json = await res.json();
+          return json.data?.matches || json.matches || [];
+        } catch {
+          return [];
+        }
+      };
+
+      const [ap, bp] = await Promise.all([fetchFormat("ap"), fetchFormat("bp")]);
+      
+      // Filter for truly finished matches to show meaningful stats
+      const finishedAP = ap.filter((m: any) => m.status === 'completed' || m.status === 'FINISHED');
+      const finishedBP = bp.filter((m: any) => m.status === 'completed' || m.status === 'FINISHED');
+      const totalFinished = finishedAP.length + finishedBP.length;
+
+      setStats({
+        matchesPlayed: totalFinished,
+        winRate: 0 // Will keep at 0 until we have a proper stats endpoint
+      });
+    };
+
+    fetchStats();
+  }, [session]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -146,14 +183,23 @@ export default function ProfilePage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-slate-300 bg-white/5 px-3 py-1.5 rounded-full border border-white/10 hidden sm:block">
-            {user.email}
-          </span>
+          <Link href="/profile" className="flex items-center gap-3 group">
+            <span className="text-sm font-medium text-slate-300 hidden sm:block group-hover:text-white transition-colors">
+              {formData.displayName || user.email?.split('@')[0]}
+            </span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-white/10 overflow-hidden shadow-lg shadow-indigo-500/20">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-white">{initials}</span>
+              )}
+            </div>
+          </Link>
           <Button 
-            variant="outline" 
+            variant="ghost" 
             size="sm" 
             onClick={handleSignOut}
-            className="border-white/10 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all"
+            className="text-slate-400 hover:text-white font-bold h-8"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Sign Out
@@ -243,8 +289,8 @@ export default function ProfilePage() {
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Debate Statistics</h3>
               <div className="space-y-4">
                 {[
-                  { label: "Matches Played", value: "0", icon: BarChart3, color: "text-indigo-400" },
-                  { label: "Win Rate", value: "0%", icon: Trophy, color: "text-yellow-400" },
+                  { label: "Matches Played", value: stats.matchesPlayed.toString(), icon: BarChart3, color: "text-indigo-400" },
+                  { label: "Win Rate", value: stats.winRate + "%", icon: Trophy, color: "text-yellow-400" },
                   { label: "Member Since", value: new Date(user.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short' }), icon: Shield, color: "text-emerald-400" },
                 ].map(({ label, value, icon: Icon, color }) => (
                   <div key={label} className="flex items-center justify-between group hover:bg-white/5 p-2 rounded-xl transition-colors">

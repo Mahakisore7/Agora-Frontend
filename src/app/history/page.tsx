@@ -12,6 +12,9 @@ export default async function HistoryPage() {
 
   if (!session) redirect("/auth/login");
 
+  const userMetadata = session.user.user_metadata || {};
+  const displayName = userMetadata.display_name || session.user.email?.split("@")[0] || "Debater";
+  const avatarUrl = userMetadata.avatar_url;
   const token = session.access_token;
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -23,21 +26,30 @@ export default async function HistoryPage() {
         cache: 'no-store'
       });
       if (!res.ok) return [];
-      const data = await res.json();
-      return (data.matches || []).map((m: any) => ({ ...m, format }));
+      const json = await res.json();
+      const matches = json.data?.matches || json.matches || [];
+      const total = json.data?.total ?? json.total ?? 0;
+      return { 
+        matches: matches.map((m: any) => ({ ...m, format })),
+        total 
+      };
     } catch {
-      return [];
+      return { matches: [], total: 0 };
     }
   };
 
-  const [apMatches, bpMatches] = await Promise.all([
+  const [apRes, bpRes] = await Promise.all([
     fetchHistory("ap"),
     fetchHistory("bp")
   ]);
 
-  const allMatches = [...apMatches, ...bpMatches].sort((a, b) => 
+  const allMatches = [...apRes.matches, ...bpRes.matches].sort((a, b) => 
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+
+  const totalAll = apRes.total + bpRes.total;
+  const apMatches = apRes.matches;
+  const bpMatches = bpRes.matches;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -54,9 +66,22 @@ export default async function HistoryPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-medium text-slate-300 hidden sm:block">{session.user.email}</span>
+          <Link href="/profile" className="flex items-center gap-3 group">
+            <span className="text-sm font-medium text-slate-300 hidden sm:block group-hover:text-white transition-colors">
+              {displayName}
+            </span>
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center border border-white/10 overflow-hidden shadow-lg shadow-indigo-500/20">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-white">{displayName.substring(0, 2).toUpperCase()}</span>
+              )}
+            </div>
+          </Link>
           <form action="/auth/signout" method="post">
-            <Button variant="secondary" size="sm" type="submit" className="font-bold">Sign out</Button>
+            <Button variant="ghost" size="sm" type="submit" className="text-muted-foreground hover:text-white font-bold h-8">
+              Sign out
+            </Button>
           </form>
         </div>
       </nav>
@@ -74,9 +99,9 @@ export default async function HistoryPage() {
 
         <Tabs defaultValue="all" className="w-full">
           <TabsList className="mb-4">
-            <TabsTrigger value="all">All Matches ({allMatches.length})</TabsTrigger>
-            <TabsTrigger value="ap">Asian Parliamentary ({apMatches.length})</TabsTrigger>
-            <TabsTrigger value="bp">British Parliamentary ({bpMatches.length})</TabsTrigger>
+            <TabsTrigger value="all">All Matches ({totalAll})</TabsTrigger>
+            <TabsTrigger value="ap">Asian Parliamentary ({apRes.total})</TabsTrigger>
+            <TabsTrigger value="bp">British Parliamentary ({bpRes.total})</TabsTrigger>
           </TabsList>
           
           <TabsContent value="all" className="m-0">
