@@ -80,6 +80,8 @@ export default function MatchSetupPage() {
   const [role, setRole] = useState<string>("prime_minister");
   // Step 3: Motion
   const [motion, setMotion] = useState("");
+  // Step 4: Difficulty
+  const [difficulty, setDifficulty] = useState<string>("medium");
   // Loading state
   const [loading, setLoading] = useState(false);
 
@@ -127,7 +129,7 @@ export default function MatchSetupPage() {
        */
       const result = await createMatch(
         format,
-        { motion, side, role },
+        { motion, side, role, difficulty },
         session.access_token
       );
 
@@ -270,6 +272,34 @@ export default function MatchSetupPage() {
                   {m}
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* ────────── STEP 4: DIFFICULTY ────────── */}
+          <div className="space-y-3">
+            <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Step 4 — AI Difficulty
+            </Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Choose how challenging the AI debaters will be.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {(["easy", "medium", "hard"] as const).map((lvl) => {
+                const isActive = difficulty === lvl;
+                return (
+                  <button
+                    key={lvl}
+                    onClick={() => setDifficulty(lvl)}
+                    className={`p-3 rounded-lg border-2 text-center transition-all duration-200 capitalize font-medium text-sm ${
+                      isActive
+                        ? "bg-indigo-500/10 border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                        : "border-border hover:border-primary/30 hover:bg-muted/50"
+                    }`}
+                  >
+                    {lvl}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

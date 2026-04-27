@@ -25,7 +25,7 @@ export default async function HistoryPage() {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
-      if (!res.ok) return [];
+      if (!res.ok) return { matches: [], total: 0 };
       const json = await res.json();
       const matches = json.data?.matches || json.matches || [];
       const total = json.data?.total ?? json.total ?? 0;
@@ -145,7 +145,7 @@ function MatchList({ matches }: { matches: any[] }) {
                   {match.status}
                 </span>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {new Date(match.created_at).toLocaleDateString()} at {new Date(match.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  {new Date(match.created_at.endsWith('Z') ? match.created_at : match.created_at + 'Z').toLocaleDateString()} at {new Date(match.created_at.endsWith('Z') ? match.created_at : match.created_at + 'Z').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                 </span>
               </div>
               <h4 className="font-semibold text-lg truncate pr-4 text-foreground/90">{match.motion}</h4>

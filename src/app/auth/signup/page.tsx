@@ -33,8 +33,10 @@ const GitHubIcon = () => (
 );
 
 export default function SignupPage() {
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const [done, setDone] = useState(false);
@@ -58,8 +60,20 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: {
+          display_name: username
+        }
+      }
+    });
     if (error) {
       toast.error("Signup Failed", { description: error.message });
       setLoading(false);
@@ -122,7 +136,14 @@ export default function SignupPage() {
           {/* Email form */}
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-indigo-300">Email</Label>
+              <Label htmlFor="username" className="text-indigo-300">Username</Label>
+              <Input id="username" type="text" value={username}
+                onChange={(e) => setUsername(e.target.value)} required 
+                className="bg-black/50 border-indigo-500/30 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-indigo-300">Email Address</Label>
               <Input id="email" type="email" value={email}
                 onChange={(e) => setEmail(e.target.value)} required 
                 className="bg-black/50 border-indigo-500/30 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500" 
@@ -132,6 +153,13 @@ export default function SignupPage() {
               <Label htmlFor="password" className="text-indigo-300">Password</Label>
               <Input id="password" type="password" value={password}
                 onChange={(e) => setPassword(e.target.value)} required 
+                className="bg-black/50 border-indigo-500/30 text-white focus-visible:ring-indigo-500" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-indigo-300">Confirm Password</Label>
+              <Input id="confirmPassword" type="password" value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)} required 
                 className="bg-black/50 border-indigo-500/30 text-white focus-visible:ring-indigo-500" 
               />
             </div>

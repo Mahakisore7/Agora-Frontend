@@ -107,6 +107,7 @@ interface CreateMatchPayload {
   motion: string;
   side: DebateSide;
   role: string;
+  difficulty: string;
 }
 
 interface CreateMatchResponse {
