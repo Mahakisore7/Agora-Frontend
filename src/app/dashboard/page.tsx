@@ -25,7 +25,7 @@ export default async function DashboardPage() {
         // Next.js fetch cache configuration: opt-out of static behavior
         cache: 'no-store'
       });
-      if (!res.ok) return [];
+      if (!res.ok) return { matches: [], total: 0 };
       const json = await res.json();
       const matches = json.data?.matches || json.matches || [];
       const total = json.data?.total ?? json.total ?? 0;
@@ -164,7 +164,7 @@ export default async function DashboardPage() {
                             {match.status}
                           </span>
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {new Date(match.created_at).toLocaleDateString()}
+                            {new Date(match.created_at.endsWith('Z') ? match.created_at : match.created_at + 'Z').toLocaleDateString()} at {new Date(match.created_at.endsWith('Z') ? match.created_at : match.created_at + 'Z').toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                           </span>
                         </div>
                         <h4 className="font-semibold text-base truncate pr-4">{match.motion}</h4>
