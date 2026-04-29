@@ -194,7 +194,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       }
     };
 
-    socket.onerror = (e) => console.error("[Arena] WS Error:", e);
+    socket.onerror = (e) => console.warn("[Arena] WS Error (harmless if during unmount):", e);
     socket.onclose = () => {
       console.log("[Arena] WebSocket disconnected — stopping audio.");
       if (get().socket === socket) {
