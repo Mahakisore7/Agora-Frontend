@@ -65,6 +65,18 @@ export const ROLE_LABELS: Record<string, string> = {
   opposition_whip: "Opposition Whip",
 };
 
+/** BP-specific team labels */
+export const ROLE_TO_TEAM_LABEL: Record<string, string> = {
+  prime_minister: "Opening Government",
+  deputy_prime_minister: "Opening Government",
+  leader_of_opposition: "Opening Opposition",
+  deputy_leader_of_opposition: "Opening Opposition",
+  member_of_government: "Closing Government",
+  government_whip: "Closing Government",
+  member_of_opposition: "Closing Opposition",
+  opposition_whip: "Closing Opposition",
+};
+
 /** Which roles are available for each format */
 export const FORMAT_ROLES: Record<DebateFormat, string[]> = {
   ap: [

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProfileDrawer } from "@/components/ui/profile-drawer";
 import { Mic, SkipForward, Hand, Users, Target } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FORMAT_ROLES, ROLE_LABELS, ROLE_TO_SIDE, DebateFormat } from "@/lib/api";
+import { FORMAT_ROLES, ROLE_LABELS, ROLE_TO_SIDE, ROLE_TO_TEAM_LABEL, DebateFormat } from "@/lib/api";
 
 function ArenaInner() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -259,7 +259,9 @@ function ArenaInner() {
                       <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${isGov ? 'text-blue-400' : 'text-red-400'}`}>
                         {ROLE_LABELS[roleKey]}
                       </span>
-                      <span className="text-[10px] text-slate-400 uppercase tracking-widest">{isGov ? 'Government' : 'Opposition'}</span>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-widest">
+                        {format === 'bp' ? ROLE_TO_TEAM_LABEL[roleKey] : (isGov ? 'Government' : 'Opposition')}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -316,7 +318,7 @@ function ArenaInner() {
             </AnimatePresence>
 
             {/* AI Typing Indicator */}
-            {currentSpeaker === "ai" && !aiBufferedText && (
+            {currentSpeaker === "ai" && !aiBufferedText && !aiThoughtComplete && (
               <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-3 justify-start">
                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
                     <span className="text-xs font-bold text-gray-400">AI</span>
