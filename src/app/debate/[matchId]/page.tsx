@@ -316,7 +316,7 @@ function ArenaInner() {
             </AnimatePresence>
 
             {/* AI Typing Indicator */}
-            {currentSpeaker === "ai" && !aiBufferedText && (
+            {currentSpeaker === "ai" && !aiBufferedText && !aiThoughtComplete && (
               <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-3 justify-start">
                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
                     <span className="text-xs font-bold text-gray-400">AI</span>
