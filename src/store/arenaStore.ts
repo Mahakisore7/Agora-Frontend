@@ -34,6 +34,33 @@ export interface TranscriptEntry {
   timestamp: Date;
 }
 
+// ─── Module-level audio state ───────────────────────────────────────────────
+// These live OUTSIDE Zustand because Web Audio API objects are mutable singletons
+// that cannot be serialized into immutable state. Keeping them here lets us
+// reliably stop/close them on disconnect without racing with React re-renders.
+let _audioCtx: AudioContext | null = null;
+let _activeSource: AudioBufferSourceNode | null = null;
+
+/**
+ * Immediately kill all in-flight and queued audio playback.
+ * Called by disconnect() and connect() to guarantee silence on session change.
+ */
+function _stopAllAudio() {
+  // 1. Stop the currently-playing buffer source (this fires onended, but we
+  //    guard against re-processing in processAudioQueue via the connected check).
+  if (_activeSource) {
+    try { _activeSource.stop(); } catch { /* already stopped */ }
+    _activeSource = null;
+  }
+
+  // 2. Close the AudioContext entirely. This releases all system audio
+  //    resources and ensures nothing can resume playback from this context.
+  if (_audioCtx) {
+    try { _audioCtx.close(); } catch { /* already closed */ }
+    _audioCtx = null;
+  }
+}
+
 interface ArenaState {
   socket: WebSocket | null;
   connected: boolean;
@@ -42,6 +69,7 @@ interface ArenaState {
   currentSpeaker: "ai" | "human" | null;
   currentSpeakerRole: string | null;
   aiBufferedText: string;        // Accumulates AI_TOKEN events into a full sentence
+  aiThoughtComplete: boolean;    // Whether the AI has finished generating text
   transcript: TranscriptEntry[]; // Full debate transcript shown in the UI
   isMatchComplete: boolean;
   verdict: ArenaEvent | null;
@@ -55,12 +83,14 @@ interface ArenaState {
   // Actions
   connect: (matchId: string, token: string) => void;
   disconnect: () => void;
+  stopAllAudio: () => void;
   getSocket: () => WebSocket | null
   sendEvent: (event: object) => void;
   appendAiToken: (token: string) => void;
   addTranscriptEntry: (entry: TranscriptEntry) => void;
   setMatchComplete: (verdict: ArenaEvent) => void;
   processAudioQueue: () => void;
+  checkAiTurnComplete: () => void;
 }
 
 export const useArenaStore = create<ArenaState>((set, get) => ({
@@ -70,6 +100,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   currentSpeaker: null,
   currentSpeakerRole: null,
   aiBufferedText: "",
+  aiThoughtComplete: false,
   transcript: [],
   isMatchComplete: false,
   verdict: null,
@@ -79,22 +110,36 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   adjudicationMessage: null,
 
   connect: (matchId, token) => {
+    // Tear down previous session completely: socket + audio + state
+    get().disconnect();
+    set({
+      matchId,
+      transcript: [],
+      audioQueue: [],
+      isPlayingAudio: false,
+      aiBufferedText: "",
+      aiThoughtComplete: false,
+      currentSpeaker: null,
+      currentSpeakerRole: null,
+      isMatchComplete: false,
+      verdict: null,
+      adjudicationComplete: false,
+      adjudicationMessage: null,
+    });
+
     const wsUrl = `${process.env.NEXT_PUBLIC_WS_BASE_URL}/ws/live?match_id=${matchId}&token=${token}`;
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
       console.log("[Arena] WebSocket connected — waiting for user to start match.");
-      // Ensure we only update state if this is still the active socket
       if (get().socket === socket) {
         set({ connected: true });
-        // We can safely send START_MATCH here because this store is only mounted
-        // within the actual Live Arena layout, meaning the user is ready.
         socket.send(JSON.stringify({ action: "START_MATCH" }));
       }
     };
 
     socket.onmessage = (event) => {
-      // Binary = audio from ElevenLabs — play it
+      // Binary = TTS audio from Voicebox — play it
       if (event.data instanceof Blob) {
         event.data.arrayBuffer().then((buffer) => {
           set((state) => ({ audioQueue: [...state.audioQueue, buffer] }));
@@ -120,13 +165,15 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
             addTranscriptEntry({ speaker: "AI", role: get().currentSpeakerRole || undefined, content: get().aiBufferedText.trim(), timestamp: new Date() });
             set({ aiBufferedText: "" });
           }
-          set({ currentSpeaker: data.speaker, currentSpeakerRole: data.role || null });
+          set({ currentSpeaker: data.speaker, currentSpeakerRole: data.role || null, aiThoughtComplete: false });
         } else if (data.event === "AI_THOUGHT_COMPLETE") {
            // Fallback flush
            if (get().aiBufferedText.trim().length > 0) {
               addTranscriptEntry({ speaker: "AI", role: get().currentSpeakerRole || undefined, content: get().aiBufferedText.trim(), timestamp: new Date() });
               set({ aiBufferedText: "" });
            }
+           set({ aiThoughtComplete: true });
+           get().checkAiTurnComplete();
         } else if (data.event === "MATCH_COMPLETE") {
           setMatchComplete(data);
           set({ adjudicationMessage: "All speeches done. AI adjudication starting..." });
@@ -149,9 +196,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.onerror = (e) => console.error("[Arena] WS Error:", e);
     socket.onclose = () => {
-      console.log("[Arena] WebSocket disconnected");
+      console.log("[Arena] WebSocket disconnected — stopping audio.");
       if (get().socket === socket) {
-        set({ connected: false, socket: null });
+        // Kill audio immediately when the WebSocket drops
+        _stopAllAudio();
+        set({ connected: false, socket: null, audioQueue: [], isPlayingAudio: false });
       }
     };
 
@@ -159,11 +208,29 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   },
 
   disconnect: () => {
+    // 1. Stop all audio playback immediately
+    _stopAllAudio();
+
+    // 2. Close the WebSocket
     const { socket } = get();
     if (socket) {
       socket.close();
-      set({ socket: null, connected: false });
     }
+
+    // 3. Wipe all transient state
+    set({ 
+      socket: null, 
+      connected: false,
+      audioQueue: [],
+      isPlayingAudio: false,
+      aiBufferedText: "",
+      aiThoughtComplete: false,
+    });
+  },
+
+  stopAllAudio: () => {
+    _stopAllAudio();
+    set({ audioQueue: [], isPlayingAudio: false });
   },
 
   getSocket: () => {
@@ -192,33 +259,76 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
   processAudioQueue: () => {
     const state = get();
+
+    // Guard: don't play if already playing, nothing queued, or disconnected
     if (state.isPlayingAudio || state.audioQueue.length === 0) return;
+    if (!state.connected && !state.socket) {
+      // Session is over — flush remaining queue silently
+      set({ audioQueue: [], isPlayingAudio: false });
+      return;
+    }
 
     set({ isPlayingAudio: true });
     const buffer = state.audioQueue[0];
 
-    const audioCtx = new window.AudioContext();
-    audioCtx.decodeAudioData(buffer, (decodedData) => {
-      const source = audioCtx.createBufferSource();
+    // Lazily create a single AudioContext for the entire session
+    if (!_audioCtx || _audioCtx.state === "closed") {
+      _audioCtx = new window.AudioContext();
+    }
+
+    const ctx = _audioCtx;
+
+    ctx.decodeAudioData(buffer).then((decodedData) => {
+      // Double-check we're still connected (generation may have been cancelled
+      // while we were decoding)
+      if (!get().connected && !get().socket) {
+        _stopAllAudio();
+        set({ audioQueue: [], isPlayingAudio: false });
+        return;
+      }
+
+      const source = ctx.createBufferSource();
       source.buffer = decodedData;
-      source.connect(audioCtx.destination);
+      source.connect(ctx.destination);
+      _activeSource = source;
       
       source.onended = () => {
+        _activeSource = null;
         set((s) => ({
           audioQueue: s.audioQueue.slice(1),
           isPlayingAudio: false,
         }));
+        // Chain to next chunk
         get().processAudioQueue();
+        // Check if AI turn is fully complete
+        get().checkAiTurnComplete();
       };
       
       source.start();
     }).catch((err) => {
       console.error("[Arena] Failed to decode audio block:", err);
+      _activeSource = null;
       set((s) => ({
         audioQueue: s.audioQueue.slice(1),
         isPlayingAudio: false,
       }));
       get().processAudioQueue();
+      get().checkAiTurnComplete();
     });
+  },
+
+  checkAiTurnComplete: () => {
+    const state = get();
+    // Only automatically end the turn if it's the AI's turn, text generation is done, 
+    // and there is no more audio queued or playing.
+    if (
+      state.currentSpeaker === "ai" &&
+      state.aiThoughtComplete &&
+      state.audioQueue.length === 0 &&
+      !state.isPlayingAudio
+    ) {
+      console.log("[Arena] AI audio queue exhausted and thought complete. Ending AI turn automatically.");
+      state.sendEvent({ action: "END_TURN" });
+    }
   },
 }));
