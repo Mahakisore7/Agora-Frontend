@@ -69,6 +69,7 @@ interface ArenaState {
   currentSpeaker: "ai" | "human" | null;
   currentSpeakerRole: string | null;
   aiBufferedText: string;        // Accumulates AI_TOKEN events into a full sentence
+  humanBufferedText: string;     // Accumulates HUMAN_TRANSCRIPT_CHUNK events
   aiThoughtComplete: boolean;    // Whether the AI has finished generating text
   transcript: TranscriptEntry[]; // Full debate transcript shown in the UI
   isMatchComplete: boolean;
@@ -100,6 +101,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   currentSpeaker: null,
   currentSpeakerRole: null,
   aiBufferedText: "",
+  humanBufferedText: "",
   aiThoughtComplete: false,
   transcript: [],
   isMatchComplete: false,
@@ -118,6 +120,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       audioQueue: [],
       isPlayingAudio: false,
       aiBufferedText: "",
+      humanBufferedText: "",
       aiThoughtComplete: false,
       currentSpeaker: null,
       currentSpeakerRole: null,
@@ -155,6 +158,9 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
         if (data.event === "AI_TOKEN" && data.text) {
           appendAiToken(data.text);
+        } else if (data.event === "HUMAN_TRANSCRIPT_CHUNK" && data.text) {
+          const current = get().humanBufferedText;
+          set({ humanBufferedText: current + (current ? " " : "") + data.text });
         } else if (data.event === "HUMAN_TRANSCRIPT" && data.text) {
           addTranscriptEntry({ speaker: "Human", role: get().currentSpeakerRole || undefined, content: data.text, timestamp: new Date() });
         } else if (data.event === "POI_ACCEPTED" || data.event === "POI_DECLINED") {
@@ -164,6 +170,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           if (data.speaker === "human" && get().aiBufferedText.trim().length > 0) {
             addTranscriptEntry({ speaker: "AI", role: get().currentSpeakerRole || undefined, content: get().aiBufferedText.trim(), timestamp: new Date() });
             set({ aiBufferedText: "" });
+          }
+          // If a human just finished, flush their streamed block to the final transcript
+          if (get().humanBufferedText.trim().length > 0) {
+            addTranscriptEntry({ speaker: "Human", role: get().currentSpeakerRole || undefined, content: get().humanBufferedText.trim(), timestamp: new Date() });
+            set({ humanBufferedText: "" });
           }
           set({ currentSpeaker: data.speaker, currentSpeakerRole: data.role || null, aiThoughtComplete: false });
         } else if (data.event === "AI_THOUGHT_COMPLETE") {
@@ -224,6 +235,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       audioQueue: [],
       isPlayingAudio: false,
       aiBufferedText: "",
+      humanBufferedText: "",
       aiThoughtComplete: false,
     });
   },
