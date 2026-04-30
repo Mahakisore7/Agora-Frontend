@@ -27,7 +27,7 @@ function ArenaInner() {
 
   const {
     connect, disconnect, sendEvent, getSocket,
-    connected, transcript, aiBufferedText,
+    connected, transcript, aiBufferedText, humanBufferedText, aiThoughtComplete,
     isMatchComplete, currentSpeaker, currentSpeakerRole,
     adjudicationComplete, adjudicationMessage
   } = useArenaStore();
@@ -317,20 +317,28 @@ function ArenaInner() {
               ))}
             </AnimatePresence>
 
-            {/* AI Typing Indicator */}
-            {currentSpeaker === "ai" && !aiBufferedText && !aiThoughtComplete && (
+            {/* Activity Indicator (Thinking or Preparing) */}
+            {currentSpeaker === "ai" && !aiBufferedText && (
               <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-3 justify-start">
                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
-                    <span className="text-xs font-bold text-gray-400">AI</span>
+                    <span className="text-xs font-bold text-gray-400">
+                      {aiThoughtComplete ? "..." : "AI"}
+                    </span>
                   </div>
                 <div className="max-w-[85%] rounded-3xl p-6 bg-gray-900/60 border border-gray-700/50 text-gray-300 rounded-bl-sm shadow-2xl backdrop-blur-md relative overflow-hidden">
                    {/* Shimmer effect */}
                   <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
                   <p className="text-xs font-black mb-3 tracking-widest uppercase text-gray-400 flex items-center gap-2">
-                    {currentSpeakerRole ? `${currentSpeakerRole} is Thinking` : "AI is Thinking"}
+                    {aiThoughtComplete
+                      ? `${ROLE_LABELS[roles[Math.min(transcript.length, roles.length - 1)]]} is Taking Notes`
+                      : (currentSpeakerRole ? `${currentSpeakerRole} is Thinking` : "AI is Thinking")}
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
-                  <p className="leading-relaxed text-sm italic font-medium text-gray-500">Preparing arguments and gathering evidence...</p>
+                  <p className="leading-relaxed text-sm italic font-medium text-gray-500">
+                    {aiThoughtComplete
+                      ? "Listening to the current speech and preparing a response..."
+                      : "Preparing arguments and gathering evidence..."}
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -347,6 +355,22 @@ function ArenaInner() {
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
                   <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90">{aiBufferedText}</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Human Streaming Text (Live STT) */}
+            {humanBufferedText && (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex items-end gap-3 justify-end">
+                <div className="max-w-[85%] rounded-3xl p-6 bg-blue-600/30 border border-blue-400/40 text-blue-50 rounded-br-sm shadow-[0_4px_30px_rgba(59,130,246,0.2)] backdrop-blur-md">
+                  <p className="text-xs font-black mb-3 tracking-widest uppercase text-blue-300 flex items-center gap-2">
+                    {currentSpeakerRole ? `${currentSpeakerRole} (You)` : "You are Speaking"}
+                    <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
+                  </p>
+                  <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90">{humanBufferedText}</p>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-400/50 flex-shrink-0 animate-pulse">
+                  <Hand className="w-5 h-5 text-white" />
                 </div>
               </motion.div>
             )}
