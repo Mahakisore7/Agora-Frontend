@@ -27,7 +27,7 @@ function ArenaInner() {
 
   const {
     connect, disconnect, sendEvent, getSocket,
-    connected, transcript, aiBufferedText,
+    connected, transcript, aiBufferedText, aiThoughtComplete,
     isMatchComplete, currentSpeaker, currentSpeakerRole,
     adjudicationComplete, adjudicationMessage
   } = useArenaStore();
