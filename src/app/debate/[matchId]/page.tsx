@@ -69,6 +69,11 @@ function ArenaInner() {
       mediaRecorder.current?.stop();
       mediaRecorder.current?.stream.getTracks().forEach(t => t.stop());
       setIsRecording(false);
+      try {
+        sendEvent({ action: "STOP_MIC" });
+      } catch (err) {
+        console.error("Failed to send STOP_MIC", err);
+      }
       return;
     }
 
