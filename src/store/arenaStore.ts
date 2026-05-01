@@ -81,6 +81,10 @@ interface ArenaState {
   adjudicationComplete: boolean;
   adjudicationMessage: string | null; // "Phase 1/5: Extracting clashes..." etc.
 
+  // Timing tracking
+  aiSpeechStartTime: number | null;
+  humanTurnStartTime: number | null;
+
   // Actions
   connect: (matchId: string, token: string) => void;
   disconnect: () => void;
@@ -110,6 +114,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   isPlayingAudio: false,
   adjudicationComplete: false,
   adjudicationMessage: null,
+  aiSpeechStartTime: null,
+  humanTurnStartTime: null,
 
   connect: (matchId, token) => {
     // Tear down previous session completely: socket + audio + state
@@ -128,6 +134,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       verdict: null,
       adjudicationComplete: false,
       adjudicationMessage: null,
+      aiSpeechStartTime: null,
+      humanTurnStartTime: null,
     });
 
     const wsUrl = `${process.env.NEXT_PUBLIC_WS_BASE_URL}/ws/live?match_id=${matchId}&token=${token}`;
@@ -176,7 +184,16 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
             addTranscriptEntry({ speaker: "Human", role: get().currentSpeakerRole || undefined, content: get().humanBufferedText.trim(), timestamp: new Date() });
             set({ humanBufferedText: "" });
           }
-          set({ currentSpeaker: data.speaker, currentSpeakerRole: data.role || null, aiThoughtComplete: false });
+          // Initialize timing for the new speaker
+          const newHumanTurnStartTime = data.speaker === "human" ? Date.now() : null;
+          
+          set({ 
+            currentSpeaker: data.speaker, 
+            currentSpeakerRole: data.role || null, 
+            aiThoughtComplete: false, 
+            aiSpeechStartTime: null,
+            humanTurnStartTime: newHumanTurnStartTime 
+          });
         } else if (data.event === "AI_THOUGHT_COMPLETE") {
            // Fallback flush
            if (get().aiBufferedText.trim().length > 0) {
@@ -237,6 +254,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       aiBufferedText: "",
       humanBufferedText: "",
       aiThoughtComplete: false,
+      aiSpeechStartTime: null,
+      humanTurnStartTime: null,
     });
   },
 
@@ -316,6 +335,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         get().checkAiTurnComplete();
       };
       
+      // Capture the exact moment the FIRST audio chunk starts playing
+      if (get().currentSpeaker === "ai" && !get().aiSpeechStartTime) {
+        set({ aiSpeechStartTime: Date.now() });
+      }
+
       source.start();
     }).catch((err) => {
       console.error("[Arena] Failed to decode audio block:", err);
@@ -340,7 +364,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       !state.isPlayingAudio
     ) {
       console.log("[Arena] AI audio queue exhausted and thought complete. Ending AI turn automatically.");
-      state.sendEvent({ action: "END_TURN" });
+      
+      const endTime = Date.now();
+      const startTime = state.aiSpeechStartTime || endTime; // Fallback if no audio played
+      const durationMs = endTime - startTime;
+
+      state.sendEvent({ 
+        action: "END_TURN",
+        ai_speech_start_time_utc: new Date(startTime).toISOString(),
+        ai_speech_end_time_utc: new Date(endTime).toISOString(),
+        ai_speech_duration_ms: durationMs
+      });
     }
   },
 }));
