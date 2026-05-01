@@ -105,7 +105,17 @@ function ArenaInner() {
     setIsEndingTurn(true);
     console.log("[Arena] Requesting end turn...");
     try {
-      sendEvent({ action: "END_TURN" });
+      const store = useArenaStore.getState();
+      const endTime = Date.now();
+      const startTime = store.humanTurnStartTime || endTime;
+      const durationMs = endTime - startTime;
+
+      sendEvent({ 
+        action: "END_TURN",
+        human_speech_start_time_utc: new Date(startTime).toISOString(),
+        human_speech_end_time_utc: new Date(endTime).toISOString(),
+        human_speech_duration_ms: durationMs
+      });
     } catch (err) {
       console.error("[Arena] Failed to send END_TURN event", err);
     }
