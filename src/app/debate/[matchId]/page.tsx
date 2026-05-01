@@ -22,6 +22,7 @@ function ArenaInner() {
   
   // Microphone Tracking
   const [isRecording, setIsRecording] = useState(false);
+  const [isEndingTurn, setIsEndingTurn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
 
@@ -39,8 +40,10 @@ function ArenaInner() {
     return () => disconnect();
   }, [matchId, session?.access_token]);
 
-    // START_MATCH is now handled natively within arenaStore upon successful WebSocket onopen.
-    // We no longer trigger it here to avoid React StrictMode duplicate events.
+  // Reset isEndingTurn when currentSpeaker actually updates from the backend
+  useEffect(() => {
+    setIsEndingTurn(false);
+  }, [currentSpeaker]);
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -69,6 +72,11 @@ function ArenaInner() {
       mediaRecorder.current?.stop();
       mediaRecorder.current?.stream.getTracks().forEach(t => t.stop());
       setIsRecording(false);
+      try {
+        sendEvent({ action: "STOP_MIC" });
+      } catch (err) {
+        console.error("Failed to send STOP_MIC", err);
+      }
       return;
     }
 
@@ -93,9 +101,21 @@ function ArenaInner() {
   };
 
   const handleEndTurn = () => {
+    if (isEndingTurn) return;
+    setIsEndingTurn(true);
     console.log("[Arena] Requesting end turn...");
     try {
-      sendEvent({ action: "END_TURN" });
+      const store = useArenaStore.getState();
+      const endTime = Date.now();
+      const startTime = store.humanTurnStartTime || endTime;
+      const durationMs = endTime - startTime;
+
+      sendEvent({ 
+        action: "END_TURN",
+        human_speech_start_time_utc: new Date(startTime).toISOString(),
+        human_speech_end_time_utc: new Date(endTime).toISOString(),
+        human_speech_duration_ms: durationMs
+      });
     } catch (err) {
       console.error("[Arena] Failed to send END_TURN event", err);
     }
@@ -452,7 +472,7 @@ function ArenaInner() {
               <div className="flex-1 flex justify-end w-full sm:w-auto">
                  <Button 
                   variant="outline" 
-                  disabled={currentSpeaker === 'ai'}
+                  disabled={currentSpeaker === 'ai' || isEndingTurn}
                   onClick={handleEndTurn}
                   className={`h-14 px-6 rounded-2xl font-bold tracking-wide transition-all w-full sm:w-auto shadow-lg ${
                     currentSpeaker === 'ai'
