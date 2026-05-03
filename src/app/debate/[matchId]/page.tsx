@@ -7,9 +7,17 @@ import { useArenaStore } from "@/store/arenaStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileDrawer } from "@/components/ui/profile-drawer";
-import { Mic, SkipForward, Hand, Users, Target } from "lucide-react";
+import { Mic, SkipForward, Hand, Users, Target, LogOut, X, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FORMAT_ROLES, ROLE_LABELS, ROLE_TO_SIDE, ROLE_TO_TEAM_LABEL, DebateFormat } from "@/lib/api";
+
+/** Map human-readable role name → side for WhatsApp-style layout */
+function getSideFromRole(role?: string): "government" | "opposition" | null {
+  if (!role) return null;
+  const r = role.toLowerCase();
+  if (r.includes("opposition") || r.includes("opp")) return "opposition";
+  return "government";
+}
 
 function ArenaInner() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -24,6 +32,7 @@ function ArenaInner() {
   const [isRecording, setIsRecording] = useState(false);
   const [isEndingTurn, setIsEndingTurn] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [showEndDebateModal, setShowEndDebateModal] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
 
   const {
@@ -237,7 +246,7 @@ function ArenaInner() {
         </button>
       </header>
 
-      <div className="flex-1 flex overflow-hidden z-10 w-full max-w-7xl mx-auto">
+      <div className="flex-1 flex overflow-hidden z-10 w-full">
         
         {/* Left Sidebar: Debate Schedule */}
         <aside className="hidden lg:flex w-72 flex-col border-r border-indigo-500/20 bg-indigo-950/20 backdrop-blur-xl p-6 overflow-y-auto scrollbar-hide">
@@ -246,7 +255,9 @@ function ArenaInner() {
             Speaker Schedule
           </h2>
           
-          <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-indigo-500/20 before:via-purple-500/20 before:to-transparent">
+          <div className="space-y-2 relative">
+            {/* Vertical timeline line */}
+            <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-indigo-500/30 via-purple-500/20 to-transparent" />
             {roles.map((roleKey, index) => {
               const isCurrent = currentSpeakerRole 
                  ? currentSpeakerRole.toLowerCase().replace(/ /g, "_") === roleKey 
@@ -257,32 +268,30 @@ function ArenaInner() {
               const isGov = side === "government";
 
               return (
-                <div key={roleKey} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-4 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 ${
+                <div key={roleKey} className="relative flex items-center gap-3">
+                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 shrink-0 z-10 ${
                       isCurrent 
-                        ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.5)] z-10' 
+                        ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.5)]' 
                         : isPast 
-                          ? 'bg-indigo-950 border-indigo-800' 
-                          : 'bg-black border-slate-800'
+                          ? 'bg-indigo-950 border-indigo-700' 
+                          : 'bg-slate-900 border-slate-700'
                     }`}>
                     <span className={`text-xs font-bold ${isCurrent ? 'text-white' : 'text-slate-500'}`}>{index + 1}</span>
                   </div>
                   
-                  <div className={`w-[calc(100%-3rem)] md:w-[calc(50%-2.5rem)] p-3 rounded-xl border ${
+                  <div className={`flex-1 p-3 rounded-xl border transition-all ${
                       isCurrent 
-                        ? 'bg-indigo-900/40 border-indigo-500/50 shadow-lg glow' 
+                        ? 'bg-indigo-900/40 border-indigo-500/50 shadow-lg' 
                         : isPast
-                          ? 'bg-indigo-950/20 border-indigo-900/30 opacity-70'
-                          : 'bg-black/40 border-slate-800 opacity-50'
+                          ? 'bg-indigo-950/20 border-indigo-900/30 opacity-60'
+                          : 'bg-black/30 border-slate-800/50 opacity-40'
                     }`}>
-                    <div className="flex flex-col">
-                      <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${isGov ? 'text-blue-400' : 'text-red-400'}`}>
-                        {ROLE_LABELS[roleKey]}
-                      </span>
-                      <span className="text-[10px] text-slate-400 uppercase tracking-widest">
-                        {format === 'bp' ? ROLE_TO_TEAM_LABEL[roleKey] : (isGov ? 'Government' : 'Opposition')}
-                      </span>
-                    </div>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider leading-tight block ${isGov ? 'text-blue-400' : 'text-rose-400'}`}>
+                      {ROLE_LABELS[roleKey]}
+                    </span>
+                    <span className={`text-[10px] uppercase tracking-widest ${isGov ? 'text-blue-500/50' : 'text-rose-500/50'}`}>
+                      {format === 'bp' ? ROLE_TO_TEAM_LABEL[roleKey] : (isGov ? 'Government' : 'Opposition')}
+                    </span>
                   </div>
                 </div>
               );
@@ -303,52 +312,58 @@ function ArenaInner() {
               </div>
             )}
             <AnimatePresence>
-              {transcript.map((entry, i) => (
+              {transcript.map((entry, i) => {
+                const side = getSideFromRole(entry.role);
+                const isGov = side === "government";
+                return (
                 <motion.div 
                   key={i} 
                   initial={{ opacity: 0, y: 15, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                  className={`flex items-end gap-3 ${entry.speaker === "AI" ? "justify-start" : "justify-end"}`}
+                  className={`flex items-end gap-3 ${isGov ? "justify-start" : "justify-end"}`}
                 >
-                  {entry.speaker === "AI" && (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-800 flex items-center justify-center shadow-lg border border-purple-400/30 flex-shrink-0">
-                      <span className="text-xs font-bold text-white text-center leading-none">{entry.role ? entry.role[0] : "A"}</span>
+                  {isGov && (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center shadow-lg border border-blue-400/30 flex-shrink-0">
+                      <span className="text-[10px] font-bold text-white">{entry.speaker === "AI" ? "AI" : "You"}</span>
                     </div>
                   )}
                   
-                  <div className={`max-w-[85%] sm:max-w-[75%] rounded-3xl p-6 shadow-2xl backdrop-blur-md ${
-                    entry.speaker === "AI"
-                      ? "bg-indigo-950/50 border border-indigo-500/30 text-indigo-50 rounded-bl-sm"
-                      : "bg-blue-600/30 border border-blue-400/40 text-blue-50 rounded-br-sm"
+                  <div className={`max-w-[70%] rounded-2xl p-5 shadow-xl backdrop-blur-md ${
+                    isGov
+                      ? "bg-blue-950/50 border border-blue-500/25 text-blue-50 rounded-bl-sm"
+                      : "bg-rose-950/40 border border-rose-500/25 text-rose-50 rounded-br-sm"
                   }`}>
-                    <p className={`text-xs font-black mb-3 tracking-widest uppercase flex items-center gap-2 ${entry.speaker === "AI" ? "text-purple-300" : "text-blue-300"}`}>
+                    <p className={`text-[10px] font-black mb-2 tracking-widest uppercase flex items-center gap-2 ${isGov ? "text-blue-400" : "text-rose-400"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${isGov ? 'bg-blue-400' : 'bg-rose-400'}`} />
                       {entry.role || entry.speaker}
+                      {entry.speaker === "Human" && <span className="text-white/40 font-normal normal-case tracking-normal">(You)</span>}
                     </p>
-                    <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90 whitespace-pre-wrap">{entry.content}</p>
+                    <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90 whitespace-pre-wrap">{entry.content}</p>
                   </div>
 
-                  {entry.speaker === "Human" && (
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg border border-blue-400/30 flex-shrink-0">
-                      <Hand className="w-5 h-5 text-white" />
+                  {!isGov && (
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-pink-700 flex items-center justify-center shadow-lg border border-rose-400/30 flex-shrink-0">
+                      <span className="text-[10px] font-bold text-white">{entry.speaker === "AI" ? "AI" : "You"}</span>
                     </div>
                   )}
                 </motion.div>
-              ))}
+              );
+              })}
             </AnimatePresence>
 
             {/* Activity Indicator (Thinking or Preparing) */}
-            {currentSpeaker === "ai" && !aiBufferedText && (
-              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="flex items-end gap-3 justify-start">
-                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
-                    <span className="text-xs font-bold text-gray-400">
-                      {aiThoughtComplete ? "..." : "AI"}
-                    </span>
-                  </div>
-                <div className="max-w-[85%] rounded-3xl p-6 bg-gray-900/60 border border-gray-700/50 text-gray-300 rounded-bl-sm shadow-2xl backdrop-blur-md relative overflow-hidden">
-                   {/* Shimmer effect */}
-                  <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
-                  <p className="text-xs font-black mb-3 tracking-widest uppercase text-gray-400 flex items-center gap-2">
+            {currentSpeaker === "ai" && !aiBufferedText && (() => {
+              const thinkSide = getSideFromRole(currentSpeakerRole || undefined);
+              const thinkGov = thinkSide === "government";
+              return (
+              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className={`flex items-end gap-3 ${thinkGov ? 'justify-start' : 'justify-end'}`}>
+                 {thinkGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
+                    <span className="text-[10px] font-bold text-gray-400">AI</span>
+                  </div>}
+                <div className="max-w-[70%] rounded-2xl p-5 bg-gray-900/60 border border-gray-700/50 text-gray-300 rounded-bl-sm shadow-xl backdrop-blur-md relative overflow-hidden">
+                   <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
+                  <p className="text-[10px] font-black mb-2 tracking-widest uppercase text-gray-400 flex items-center gap-2">
                     {aiThoughtComplete
                       ? `${ROLE_LABELS[roles[Math.min(transcript.length, roles.length - 1)]]} is Taking Notes`
                       : (currentSpeakerRole ? `${currentSpeakerRole} is Thinking` : "AI is Thinking")}
@@ -360,66 +375,89 @@ function ArenaInner() {
                       : "Preparing arguments and gathering evidence..."}
                   </p>
                 </div>
+                {!thinkGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-lg border border-gray-600/50 animate-pulse flex-shrink-0">
+                    <span className="text-[10px] font-bold text-gray-400">AI</span>
+                  </div>}
               </motion.div>
-            )}
+            );})()}
 
             {/* AI Streaming Text */}
-            {aiBufferedText && (
-              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex items-end gap-3 justify-start">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-800 flex items-center justify-center shadow-[0_0_15px_rgba(147,51,234,0.5)] border border-purple-400/50 flex-shrink-0 animate-pulse">
-                      <span className="text-xs font-bold text-white">AI</span>
-                  </div>
-                <div className="max-w-[85%] rounded-3xl p-6 bg-indigo-950/50 border border-indigo-400/50 text-indigo-50 rounded-bl-sm shadow-[0_4px_30px_rgba(79,70,229,0.2)] backdrop-blur-md">
-                  <p className="text-xs font-black mb-3 tracking-widest uppercase text-purple-300 flex items-center gap-2">
+            {aiBufferedText && (() => {
+              const streamSide = getSideFromRole(currentSpeakerRole || undefined);
+              const streamGov = streamSide === "government";
+              return (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className={`flex items-end gap-3 ${streamGov ? 'justify-start' : 'justify-end'}`}>
+                  {streamGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-400/50 flex-shrink-0 animate-pulse">
+                      <span className="text-[10px] font-bold text-white">AI</span>
+                  </div>}
+                <div className={`max-w-[70%] rounded-2xl p-5 shadow-xl backdrop-blur-md ${streamGov ? 'bg-blue-950/50 border border-blue-400/40 text-blue-50 rounded-bl-sm' : 'bg-rose-950/40 border border-rose-400/40 text-rose-50 rounded-br-sm'}`}>
+                  <p className={`text-[10px] font-black mb-2 tracking-widest uppercase flex items-center gap-2 ${streamGov ? 'text-blue-400' : 'text-rose-400'}`}>
                     {currentSpeakerRole ? `${currentSpeakerRole} is Speaking` : "AI is Speaking"}
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
-                  <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90">{aiBufferedText}</p>
+                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90">{aiBufferedText}</p>
                 </div>
+                  {!streamGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-pink-700 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.5)] border border-rose-400/50 flex-shrink-0 animate-pulse">
+                      <span className="text-[10px] font-bold text-white">AI</span>
+                  </div>}
               </motion.div>
-            )}
+            );})()}
 
             {/* Human Streaming Text (Live STT) */}
-            {humanBufferedText && (
-              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="flex items-end gap-3 justify-end">
-                <div className="max-w-[85%] rounded-3xl p-6 bg-blue-600/30 border border-blue-400/40 text-blue-50 rounded-br-sm shadow-[0_4px_30px_rgba(59,130,246,0.2)] backdrop-blur-md">
-                  <p className="text-xs font-black mb-3 tracking-widest uppercase text-blue-300 flex items-center gap-2">
+            {humanBufferedText && (() => {
+              const humanSide = getSideFromRole(currentSpeakerRole || undefined);
+              const humanGov = humanSide === "government";
+              return (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className={`flex items-end gap-3 ${humanGov ? 'justify-start' : 'justify-end'}`}>
+                {humanGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-400/50 flex-shrink-0 animate-pulse">
+                  <span className="text-[10px] font-bold text-white">You</span>
+                </div>}
+                <div className={`max-w-[70%] rounded-2xl p-5 shadow-xl backdrop-blur-md ${humanGov ? 'bg-blue-950/50 border border-blue-400/40 text-blue-50 rounded-bl-sm' : 'bg-rose-950/40 border border-rose-400/40 text-rose-50 rounded-br-sm'}`}>
+                  <p className={`text-[10px] font-black mb-2 tracking-widest uppercase flex items-center gap-2 ${humanGov ? 'text-blue-400' : 'text-rose-400'}`}>
                     {currentSpeakerRole ? `${currentSpeakerRole} (You)` : "You are Speaking"}
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
-                  <p className="leading-relaxed text-sm sm:text-[15px] font-medium tracking-wide opacity-90">{humanBufferedText}</p>
+                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90">{humanBufferedText}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.5)] border border-blue-400/50 flex-shrink-0 animate-pulse">
-                  <Hand className="w-5 h-5 text-white" />
-                </div>
+                {!humanGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-pink-700 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.5)] border border-rose-400/50 flex-shrink-0 animate-pulse">
+                  <span className="text-[10px] font-bold text-white">You</span>
+                </div>}
               </motion.div>
-            )}
+            );})()}
             <div ref={transcriptEndRef} className="h-24" />
           </div>
           
           {/* Control Deck */}
-          <footer className="mt-auto border-t border-indigo-500/20 bg-black/80 backdrop-blur-3xl p-6 z-20 pb-10 support-safe-area shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
-            <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+          <footer className="mt-auto border-t border-indigo-500/20 bg-black/80 backdrop-blur-3xl p-4 z-20 pb-8 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-4">
               
               {/* Left Action: POI */}
-              <div className="flex-1 flex justify-start w-full sm:w-auto">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <Button 
                   variant="outline" 
                   disabled={currentSpeaker !== 'ai'}
                   onClick={() => {
-                    const poiText = window.prompt("Enter your Point of Information (e.g. 'On that point, wasn't the study proven flawed?'):");
-                    if (poiText) {
-                        sendEvent({ action: "POI_OFFERED", text: poiText });
-                    }
+                    const poiText = window.prompt("Enter your Point of Information:");
+                    if (poiText) sendEvent({ action: "POI_OFFERED", text: poiText });
                   }}
-                  className={`h-14 px-6 rounded-2xl font-bold tracking-wide transition-all w-full sm:w-auto shadow-lg ${
+                  className={`h-12 px-5 rounded-xl font-bold tracking-wide transition-all flex-1 sm:flex-initial ${
                     currentSpeaker !== 'ai'
                       ? 'bg-transparent border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
-                      : 'bg-orange-500/10 border-orange-500/50 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.2)]'
+                      : 'bg-orange-500/10 border-orange-500/50 text-orange-400 hover:bg-orange-500/20'
                   }`}
                 >
-                  <Hand className="w-5 h-5 mr-2" />
-                  Offer POI
+                  <Hand className="w-4 h-4 mr-2" />
+                  POI
+                </Button>
+
+                {/* End Debate */}
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowEndDebateModal(true)}
+                  className="h-12 px-5 rounded-xl font-bold tracking-wide bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 flex-1 sm:flex-initial"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  End Debate
                 </Button>
               </div>
 
@@ -430,7 +468,7 @@ function ArenaInner() {
                         initial={{ scale: 0.8, opacity: 0.8 }}
                         animate={{ scale: 1.5, opacity: 0 }}
                         transition={{ repeat: Infinity, duration: 1.5 }}
-                        className="absolute inset-0 m-auto w-16 h-16 bg-emerald-500 rounded-full z-0"
+                        className="absolute inset-0 m-auto w-14 h-14 bg-emerald-500 rounded-full z-0"
                     />
                 )}
                 
@@ -438,31 +476,31 @@ function ArenaInner() {
                   size="lg" 
                   onClick={toggleMic}
                   disabled={currentSpeaker === 'ai'}
-                  className={`relative z-10 h-16 px-12 rounded-full shadow-2xl transition-all duration-300 font-black tracking-widest text-sm uppercase w-full sm:w-auto ${
+                  className={`relative z-10 h-14 px-10 rounded-full shadow-2xl transition-all duration-300 font-black tracking-widest text-xs uppercase w-full sm:w-auto ${
                     currentSpeaker === 'ai' 
                       ? 'bg-indigo-950/40 text-indigo-400/50 border border-indigo-900/50 cursor-not-allowed scale-95' 
                       : isRecording
-                      ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white border-2 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.7)] hover:scale-105 active:scale-95'
-                      : 'bg-gradient-to-r from-emerald-400 to-emerald-600 text-black border-none shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:shadow-[0_0_40px_rgba(16,185,129,0.7)] hover:scale-105 active:scale-95'
+                      ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white border-2 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.7)] hover:scale-105'
+                      : 'bg-gradient-to-r from-emerald-400 to-emerald-600 text-black border-none shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:scale-105'
                   }`}
                 >
                   {currentSpeaker === 'ai' ? (
-                    <div className="flex items-center gap-3">
-                      <span className="relative flex h-3 w-3">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
                       </span>
                       AI holds floor
                     </div>
                   ) : isRecording ? (
                     <>
-                      <Mic className="w-6 h-6 mr-3 animate-pulse" />
-                      Listening... (Tap to Pause)
+                      <Mic className="w-5 h-5 mr-2 animate-pulse" />
+                      Listening...
                     </>
                   ) : (
                     <>
-                      <Mic className="w-6 h-6 mr-3" />
-                      Your Turn — Tap to Speak
+                      <Mic className="w-5 h-5 mr-2" />
+                      Tap to Speak
                     </>
                   )}
                 </Button>
@@ -474,20 +512,78 @@ function ArenaInner() {
                   variant="outline" 
                   disabled={currentSpeaker === 'ai' || isEndingTurn}
                   onClick={handleEndTurn}
-                  className={`h-14 px-6 rounded-2xl font-bold tracking-wide transition-all w-full sm:w-auto shadow-lg ${
+                  className={`h-12 px-5 rounded-xl font-bold tracking-wide transition-all w-full sm:w-auto ${
                     currentSpeaker === 'ai'
                       ? 'bg-transparent border-slate-800 text-slate-600 opacity-50 cursor-not-allowed'
-                      : 'bg-white/5 border-white/20 text-white hover:bg-white/10 hover:border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.05)]'
+                      : 'bg-white/5 border-white/20 text-white hover:bg-white/10'
                   }`}
                 >
                   End My Turn
-                  <SkipForward className="w-5 h-5 ml-2 text-emerald-400" />
+                  <SkipForward className="w-4 h-4 ml-2 text-emerald-400" />
                 </Button>
               </div>
             </div>
           </footer>
         </main>
       </div>
+
+      {/* ── End Debate Confirmation Modal ──────────────────────────── */}
+      <AnimatePresence>
+        {showEndDebateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowEndDebateModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-red-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">End Debate Early?</h3>
+                  <p className="text-sm text-slate-400">This will save all progress so far.</p>
+                </div>
+                <button onClick={() => setShowEndDebateModal(false)} className="ml-auto text-slate-500 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                Your debate transcript and any completed turns will be saved to the database. 
+                You can review partial results or start a new debate from the dashboard.
+              </p>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => {
+                    disconnect();
+                    router.push('/dashboard');
+                  }}
+                  className="w-full h-12 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold rounded-xl"
+                >
+                  Save & Go to Dashboard
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEndDebateModal(false)}
+                  className="w-full h-12 border-slate-700 text-slate-300 hover:bg-slate-800 font-bold rounded-xl"
+                >
+                  Continue Debating
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Profile Slide-out Drawer */}
       <ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} />
