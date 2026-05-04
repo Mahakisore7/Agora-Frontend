@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useArenaStore } from "@/store/arenaStore";
+import { getAudioProgress } from "@/store/arenaStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProfileDrawer } from "@/components/ui/profile-drawer";
-import { Mic, SkipForward, Hand, Users, Target, LogOut, X, AlertTriangle } from "lucide-react";
+import { Mic, SkipForward, Hand, Users, Target, LogOut, X, AlertTriangle, Play, Pause, FastForward } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FORMAT_ROLES, ROLE_LABELS, ROLE_TO_SIDE, ROLE_TO_TEAM_LABEL, DebateFormat } from "@/lib/api";
 
@@ -39,8 +40,36 @@ function ArenaInner() {
     connect, disconnect, sendEvent, getSocket,
     connected, transcript, aiBufferedText, humanBufferedText, aiThoughtComplete,
     isMatchComplete, currentSpeaker, currentSpeakerRole,
-    adjudicationComplete, adjudicationMessage
+    adjudicationComplete, adjudicationMessage,
+    isPlayingAudio, isAudioPaused, pauseAudio, resumeAudio, skipAiSpeech
   } = useArenaStore();
+
+  // Audio progress bar animation
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioElapsed, setAudioElapsed] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isPlayingAudio && !isAudioPaused) {
+      const tick = () => {
+        const { progress, elapsed, duration } = getAudioProgress();
+        setAudioProgress(progress);
+        setAudioElapsed(elapsed);
+        setAudioDuration(duration);
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (!isPlayingAudio) {
+        setAudioProgress(0);
+        setAudioElapsed(0);
+        setAudioDuration(0);
+      }
+    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [isPlayingAudio, isAudioPaused]);
 
   useEffect(() => {
     if (session?.access_token && matchId) {
@@ -396,6 +425,49 @@ function ArenaInner() {
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
                   <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90">{aiBufferedText}</p>
+                  
+                  {/* Audio Controls — Play/Pause, Progress Bar, Skip */}
+                  {isPlayingAudio && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        onClick={isAudioPaused ? resumeAudio : pauseAudio}
+                        className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all flex-shrink-0"
+                      >
+                        {isAudioPaused
+                          ? <Play className="w-3.5 h-3.5 text-white ml-0.5" />
+                          : <Pause className="w-3.5 h-3.5 text-white" />}
+                      </button>
+                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${streamGov ? 'bg-blue-400' : 'bg-rose-400'}`}
+                          style={{ width: `${audioProgress * 100}%` }}
+                          transition={{ duration: 0.1 }}
+                        />
+                      </div>
+                      <span className="text-[9px] text-white/40 font-mono w-16 text-right flex-shrink-0 tracking-widest">
+                        {Math.floor(audioElapsed / 60)}:{(Math.floor(audioElapsed) % 60).toString().padStart(2, '0')} / {Math.floor(audioDuration / 60)}:{(Math.floor(audioDuration) % 60).toString().padStart(2, '0')}
+                      </span>
+                      <button
+                        onClick={skipAiSpeech}
+                        className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all flex-shrink-0"
+                        title="Skip AI speech"
+                      >
+                        <FastForward className="w-3.5 h-3.5 text-white" />
+                      </button>
+                    </div>
+                  )}
+                  {/* Skip button even if not playing audio yet */}
+                  {!isPlayingAudio && currentSpeaker === 'ai' && aiBufferedText && (
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        onClick={skipAiSpeech}
+                        className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all ${streamGov ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30' : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'}`}
+                      >
+                        <FastForward className="w-3 h-3" />
+                        Skip
+                      </button>
+                    </div>
+                  )}
                 </div>
                   {!streamGov && <div className="w-9 h-9 rounded-full bg-gradient-to-br from-rose-500 to-pink-700 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.5)] border border-rose-400/50 flex-shrink-0 animate-pulse">
                       <span className="text-[10px] font-bold text-white">AI</span>

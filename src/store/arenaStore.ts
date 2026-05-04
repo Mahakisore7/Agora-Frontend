@@ -40,25 +40,44 @@ export interface TranscriptEntry {
 // reliably stop/close them on disconnect without racing with React re-renders.
 let _audioCtx: AudioContext | null = null;
 let _activeSource: AudioBufferSourceNode | null = null;
+let _activeSourceStartTime: number = 0;  // ctx.currentTime when source.start() was called
+let _activeBufferDuration: number = 0;   // duration of current audio chunk in seconds
+
+let _totalTurnAudioDuration: number = 0; // sum of all decoded chunk durations for the current turn
+let _totalTurnAudioPlayed: number = 0;   // sum of durations of all COMPLETED chunks for the current turn
 
 /**
  * Immediately kill all in-flight and queued audio playback.
  * Called by disconnect() and connect() to guarantee silence on session change.
  */
 function _stopAllAudio() {
-  // 1. Stop the currently-playing buffer source (this fires onended, but we
-  //    guard against re-processing in processAudioQueue via the connected check).
   if (_activeSource) {
-    try { _activeSource.stop(); } catch { /* already stopped */ }
+    try { _activeSource.onended = null; _activeSource.stop(); } catch { /* ignore */ }
     _activeSource = null;
   }
-
-  // 2. Close the AudioContext entirely. This releases all system audio
-  //    resources and ensures nothing can resume playback from this context.
   if (_audioCtx) {
     try { _audioCtx.close(); } catch { /* already closed */ }
     _audioCtx = null;
   }
+  _activeSourceStartTime = 0;
+  _activeBufferDuration = 0;
+  _totalTurnAudioDuration = 0;
+  _totalTurnAudioPlayed = 0;
+}
+
+/**
+ * Get current audio playback progress (0-1) and elapsed seconds across the ENTIRE turn.
+ * Called from UI via requestAnimationFrame to animate the progress bar.
+ */
+export function getAudioProgress(): { progress: number; elapsed: number; duration: number } {
+  if (!_audioCtx || !_activeSource || _activeBufferDuration === 0) {
+    return { progress: 0, elapsed: _totalTurnAudioPlayed, duration: _totalTurnAudioDuration };
+  }
+  const currentChunkElapsed = Math.min(_audioCtx.currentTime - _activeSourceStartTime, _activeBufferDuration);
+  const totalElapsed = _totalTurnAudioPlayed + currentChunkElapsed;
+  const progress = _totalTurnAudioDuration > 0 ? Math.min(totalElapsed / _totalTurnAudioDuration, 1) : 0;
+  
+  return { progress, elapsed: totalElapsed, duration: _totalTurnAudioDuration };
 }
 
 interface ArenaState {
@@ -76,6 +95,10 @@ interface ArenaState {
   verdict: ArenaEvent | null;
   audioQueue: ArrayBuffer[];
   isPlayingAudio: boolean;
+  isAudioPaused: boolean;
+  audioProgress: number;       // 0-1 progress through current audio chunk
+  audioChunkDuration: number;  // duration of current chunk in seconds
+  pendingAudioBlobs: number;   // number of Blobs currently being read by FileReader
 
   // Adjudication state — set when the 5-phase pipeline finishes
   adjudicationComplete: boolean;
@@ -89,6 +112,9 @@ interface ArenaState {
   connect: (matchId: string, token: string) => void;
   disconnect: () => void;
   stopAllAudio: () => void;
+  pauseAudio: () => void;
+  resumeAudio: () => void;
+  skipAiSpeech: () => void;
   getSocket: () => WebSocket | null
   sendEvent: (event: object) => void;
   appendAiToken: (token: string) => void;
@@ -112,6 +138,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   verdict: null,
   audioQueue: [],
   isPlayingAudio: false,
+  isAudioPaused: false,
+  audioProgress: 0,
+  audioChunkDuration: 0,
+  pendingAudioBlobs: 0,
   adjudicationComplete: false,
   adjudicationMessage: null,
   aiSpeechStartTime: null,
@@ -152,10 +182,23 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     socket.onmessage = (event) => {
       // Binary = TTS audio from Voicebox — play it
       if (event.data instanceof Blob) {
-        event.data.arrayBuffer().then((buffer) => {
-          set((state) => ({ audioQueue: [...state.audioQueue, buffer] }));
-          get().processAudioQueue();
-        });
+        // Binary message = Deepgram audio chunk
+        set((state) => ({ pendingAudioBlobs: state.pendingAudioBlobs + 1 }));
+        const reader = new FileReader();
+        reader.onload = function () {
+          set((state) => ({ pendingAudioBlobs: Math.max(0, state.pendingAudioBlobs - 1) }));
+          if (this.result) {
+            set((state) => ({ audioQueue: [...state.audioQueue, this.result as ArrayBuffer] }));
+            get().processAudioQueue();
+          } else {
+            get().checkAiTurnComplete(); // Check if this was the last blob and it failed
+          }
+        };
+        reader.onerror = function () {
+          set((state) => ({ pendingAudioBlobs: Math.max(0, state.pendingAudioBlobs - 1) }));
+          get().checkAiTurnComplete();
+        };
+        reader.readAsArrayBuffer(event.data);
         return;
       }
 
@@ -186,6 +229,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           }
           // Initialize timing for the new speaker
           const newHumanTurnStartTime = data.speaker === "human" ? Date.now() : null;
+          _totalTurnAudioDuration = 0;
+          _totalTurnAudioPlayed = 0;
           
           set({ 
             currentSpeaker: data.speaker, 
@@ -195,11 +240,6 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
             humanTurnStartTime: newHumanTurnStartTime 
           });
         } else if (data.event === "AI_THOUGHT_COMPLETE") {
-           // Fallback flush
-           if (get().aiBufferedText.trim().length > 0) {
-              addTranscriptEntry({ speaker: "AI", role: get().currentSpeakerRole || undefined, content: get().aiBufferedText.trim(), timestamp: new Date() });
-              set({ aiBufferedText: "" });
-           }
            set({ aiThoughtComplete: true });
            get().checkAiTurnComplete();
         } else if (data.event === "MATCH_COMPLETE") {
@@ -261,7 +301,46 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
   stopAllAudio: () => {
     _stopAllAudio();
-    set({ audioQueue: [], isPlayingAudio: false });
+    set({ audioQueue: [], isPlayingAudio: false, isAudioPaused: false, audioProgress: 0, audioChunkDuration: 0 });
+  },
+
+  pauseAudio: () => {
+    if (_audioCtx && _audioCtx.state === "running") {
+      _audioCtx.suspend();
+      set({ isAudioPaused: true });
+    }
+  },
+
+  resumeAudio: () => {
+    if (_audioCtx && _audioCtx.state === "suspended") {
+      _audioCtx.resume();
+      set({ isAudioPaused: false });
+    }
+  },
+
+  skipAiSpeech: () => {
+    // Stop all audio, flush AI text to transcript, signal turn complete
+    _stopAllAudio();
+    const state = get();
+    if (state.aiBufferedText.trim().length > 0) {
+      state.addTranscriptEntry({
+        speaker: "AI",
+        role: state.currentSpeakerRole || undefined,
+        content: state.aiBufferedText.trim(),
+        timestamp: new Date(),
+      });
+      set({ aiBufferedText: "" });
+    }
+    set({
+      audioQueue: [],
+      isPlayingAudio: false,
+      isAudioPaused: false,
+      audioProgress: 0,
+      audioChunkDuration: 0,
+      aiThoughtComplete: true,
+    });
+    // Trigger the auto end-turn check
+    get().checkAiTurnComplete();
   },
 
   getSocket: () => {
@@ -322,12 +401,19 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
       source.buffer = decodedData;
       source.connect(ctx.destination);
       _activeSource = source;
+      _activeBufferDuration = decodedData.duration;
+      _totalTurnAudioDuration += decodedData.duration; // Add to global total
       
       source.onended = () => {
+        _totalTurnAudioPlayed += _activeBufferDuration; // Mark this chunk as fully played
         _activeSource = null;
+        _activeSourceStartTime = 0;
+        _activeBufferDuration = 0;
         set((s) => ({
           audioQueue: s.audioQueue.slice(1),
           isPlayingAudio: false,
+          audioProgress: 0,
+          audioChunkDuration: 0,
         }));
         // Chain to next chunk
         get().processAudioQueue();
@@ -340,6 +426,8 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         set({ aiSpeechStartTime: Date.now() });
       }
 
+      _activeSourceStartTime = ctx.currentTime;
+      set({ audioChunkDuration: decodedData.duration });
       source.start();
     }).catch((err) => {
       console.error("[Arena] Failed to decode audio block:", err);
@@ -356,10 +444,11 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   checkAiTurnComplete: () => {
     const state = get();
     // Only automatically end the turn if it's the AI's turn, text generation is done, 
-    // and there is no more audio queued or playing.
+    // there are no blobs waiting to be decoded, and there is no more audio queued or playing.
     if (
       state.currentSpeaker === "ai" &&
       state.aiThoughtComplete &&
+      state.pendingAudioBlobs === 0 &&
       state.audioQueue.length === 0 &&
       !state.isPlayingAudio
     ) {
