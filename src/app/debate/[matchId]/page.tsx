@@ -45,31 +45,7 @@ function ArenaInner() {
   } = useArenaStore();
 
   // Audio progress bar animation
-  const [audioProgress, setAudioProgress] = useState(0);
-  const [audioElapsed, setAudioElapsed] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const rafRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (isPlayingAudio && !isAudioPaused) {
-      const tick = () => {
-        const { progress, elapsed, duration } = getAudioProgress();
-        setAudioProgress(progress);
-        setAudioElapsed(elapsed);
-        setAudioDuration(duration);
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      rafRef.current = requestAnimationFrame(tick);
-    } else {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      if (!isPlayingAudio) {
-        setAudioProgress(0);
-        setAudioElapsed(0);
-        setAudioDuration(0);
-      }
-    }
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [isPlayingAudio, isAudioPaused]);
 
   useEffect(() => {
     if (session?.access_token && matchId) {
@@ -437,16 +413,25 @@ function ArenaInner() {
                           ? <Play className="w-3.5 h-3.5 text-white ml-0.5" />
                           : <Pause className="w-3.5 h-3.5 text-white" />}
                       </button>
-                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <motion.div
-                          className={`h-full rounded-full ${streamGov ? 'bg-blue-400' : 'bg-rose-400'}`}
-                          style={{ width: `${audioProgress * 100}%` }}
-                          transition={{ duration: 0.1 }}
-                        />
+                      <div className="flex-1 flex items-center justify-center gap-[3px] h-6 px-4 overflow-hidden opacity-80">
+                        {[...Array(40)].map((_, i) => {
+                          const heightValues = isAudioPaused ? ['15%'] : ['15%', `${40 + ((i * 17) % 60)}%`, '15%'];
+                          return (
+                            <motion.div
+                              key={i}
+                              className={`w-1 rounded-full ${streamGov ? 'bg-blue-400' : 'bg-rose-400'}`}
+                              animate={{ height: heightValues }}
+                              transition={{
+                                repeat: isAudioPaused ? 0 : Infinity,
+                                duration: 0.5 + (i % 4) * 0.15,
+                                ease: "easeInOut",
+                                delay: (i % 5) * 0.1
+                              }}
+                              style={{ height: '15%' }}
+                            />
+                          );
+                        })}
                       </div>
-                      <span className="text-[9px] text-white/40 font-mono w-16 text-right flex-shrink-0 tracking-widest">
-                        {Math.floor(audioElapsed / 60)}:{(Math.floor(audioElapsed) % 60).toString().padStart(2, '0')} / {Math.floor(audioDuration / 60)}:{(Math.floor(audioDuration) % 60).toString().padStart(2, '0')}
-                      </span>
                       <button
                         onClick={skipAiSpeech}
                         className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all flex-shrink-0"
