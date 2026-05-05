@@ -80,16 +80,17 @@ interface AdjudicationResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function pillarTotal(pb: PillarBreakdown, side: "government" | "opposition") {
+function pillarTotal(pb: PillarBreakdown | undefined, side: "government" | "opposition") {
+  if (!pb || !pb.matter || !pb.manner || !pb.method || !pb.role) return 0;
   return (
-    pb.matter[`${side}_score`] +
-    pb.manner[`${side}_score`] +
-    pb.method[`${side}_score`] +
-    pb.role[`${side}_score`]
+    (pb.matter[`${side}_score`] || 0) +
+    (pb.manner[`${side}_score`] || 0) +
+    (pb.method[`${side}_score`] || 0) +
+    (pb.role[`${side}_score`] || 0)
   );
 }
 
-function winnerFromPillars(pb: PillarBreakdown): "Government" | "Opposition" | "Tie" {
+function winnerFromPillars(pb: PillarBreakdown | undefined): "Government" | "Opposition" | "Tie" {
   const g = pillarTotal(pb, "government");
   const o = pillarTotal(pb, "opposition");
   if (g > o) return "Government";
@@ -486,14 +487,24 @@ function ResultsInner() {
     </div>
   );
 
-  if (!results) return null;
+  if (!results) return (
+    <div className="min-h-screen bg-[#050510] flex items-center justify-center text-red-500 z-50">
+      DEBUG: Results are null.
+    </div>
+  );
 
-  const pb = results.pillar_breakdown;
+  const pb = results.pillar_breakdown || {
+    matter: { government_score: 0, opposition_score: 0, reasoning: "" },
+    manner: { government_score: 0, opposition_score: 0, reasoning: "" },
+    method: { government_score: 0, opposition_score: 0, reasoning: "" },
+    role: { government_score: 0, opposition_score: 0, reasoning: "" },
+    pillar_reasoning: ""
+  };
   const winner = winnerFromPillars(pb);
-  const govTotal = pillarTotal(pb, "government");
-  const oppTotal = pillarTotal(pb, "opposition");
-  const netScore = results.net_logic_score;
-  const isGovWin = winner === "Government";
+  const govTotal = results.gov_total_score ?? pillarTotal(pb, "government");
+  const oppTotal = results.opp_total_score ?? pillarTotal(pb, "opposition");
+  const netScore = results.net_logic_score ?? 0;
+  const isGovWin = winner === "Government" || govTotal > oppTotal;
 
   const fadeUp = (delay = 0) => ({
     initial: { opacity: 0, y: 30 },
@@ -605,10 +616,10 @@ function ResultsInner() {
           <SectionHeader icon={<Gavel className="w-5 h-5" />} title="Adjudication Statement" />
           <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/10 p-6">
             <p className="text-slate-200 leading-relaxed text-[15px] mb-6">
-              {results.summary.adjudication}
+              {results.summary?.adjudication || "Adjudication summary is currently unavailable."}
             </p>
             <div className="space-y-3">
-              {[results.summary.key_decision_1, results.summary.key_decision_2, results.summary.key_decision_3]
+              {[results.summary?.key_decision_1, results.summary?.key_decision_2, results.summary?.key_decision_3]
                 .filter(Boolean)
                 .map((decision, i) => (
                   <div key={i} className="flex items-start gap-3">
@@ -650,7 +661,7 @@ function ResultsInner() {
         <motion.section {...fadeUp(0.4)}>
           <SectionHeader icon={<Brain className="w-5 h-5" />} title="Weighted Clash Matrix" subtitle={`Net Logic Score: ${netScore >= 0 ? "+" : ""}${netScore} → ${netScore > 0 ? "Government" : netScore < 0 ? "Opposition" : "Tied"} logical win`} />
           <div className="space-y-2">
-            {results.wcm_matrix.map((entry) => (
+            {(results.wcm_matrix || []).map((entry) => (
               <WCMRow key={entry.clash_id} entry={entry} />
             ))}
           </div>
@@ -678,7 +689,7 @@ function ResultsInner() {
         <motion.section {...fadeUp(0.45)}>
           <SectionHeader icon={<Mic2 className="w-5 h-5" />} title="Speaker Performance" subtitle="Graded on Argument, Evidence, Responsiveness, Structure, Persona (each 0–10)" />
           <div className="space-y-3">
-            {results.speaker_scores.map((s, i) => (
+            {(results.speaker_scores || []).map((s, i) => (
               <SpeakerCard key={s.role} speaker={s} index={i} />
             ))}
           </div>
