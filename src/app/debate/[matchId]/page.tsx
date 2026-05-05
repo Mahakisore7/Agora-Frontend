@@ -400,7 +400,7 @@ function ArenaInner() {
                     {currentSpeakerRole ? `${currentSpeakerRole} is Speaking` : "AI is Speaking"}
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
-                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90">{aiBufferedText}</p>
+                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90 whitespace-pre-wrap">{aiBufferedText}</p>
                   
                   {/* Audio Controls — Play/Pause, Progress Bar, Skip */}
                   {isPlayingAudio && (
@@ -480,7 +480,7 @@ function ArenaInner() {
                     {currentSpeakerRole ? `${currentSpeakerRole} (You)` : "You are Speaking"}
                     <motion.span animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>●</motion.span>
                   </p>
-                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90">
+                  <p className="leading-relaxed text-sm font-medium tracking-wide opacity-90 whitespace-pre-wrap">
                     {humanBufferedText || <span className="italic opacity-50">Listening...</span>}
                   </p>
                 </div>
