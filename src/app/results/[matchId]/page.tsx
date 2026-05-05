@@ -429,6 +429,11 @@ function ResultsInner() {
     if (!session?.access_token) return;
     try {
       const data = await getDebateResults(matchId, session.access_token, format);
+      // Backend returns null (JSON null) when adjudication isn't stored yet
+      if (data == null) {
+        setPolling(true);
+        return;
+      }
       setResults(data);
       setLoading(false);
       setPolling(false);
@@ -488,8 +493,9 @@ function ResultsInner() {
   );
 
   if (!results) return (
-    <div className="min-h-screen bg-[#050510] flex items-center justify-center text-red-500 z-50">
-      DEBUG: Results are null.
+    <div className="min-h-screen bg-[#050510] flex items-center justify-center">
+      <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }}
+        className="text-slate-400 text-lg">Loading results...</motion.div>
     </div>
   );
 
