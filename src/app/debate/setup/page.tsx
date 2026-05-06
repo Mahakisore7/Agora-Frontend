@@ -304,6 +304,11 @@ export default function MatchSetupPage() {
                   >
                     <option value="Global">Global</option>
                     <option value="Tournament">Tournament</option>
+                    <option value="Technology">Technology</option>
+                    <option value="Economics">Economics</option>
+                    <option value="Philosophy">Philosophy</option>
+                    <option value="Social Justice">Social Justice</option>
+                    <option value="Pop Culture">Pop Culture</option>
                     <option value="Random">Random</option>
                   </select>
                 )}
