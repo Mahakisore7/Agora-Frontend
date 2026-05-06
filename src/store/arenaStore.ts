@@ -218,7 +218,7 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           console.log("[Arena] POI outcome:", data);
         } else if (data.event === "TURN_STARTED" && data.speaker) {
           // If the AI just finished, flush its entire streamed block to the final transcript
-          if (data.speaker === "human" && get().aiBufferedText.trim().length > 0) {
+          if (get().aiBufferedText.trim().length > 0) {
             addTranscriptEntry({ speaker: "AI", role: get().currentSpeakerRole || undefined, content: get().aiBufferedText.trim(), timestamp: new Date() });
             set({ aiBufferedText: "" });
           }
