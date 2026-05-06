@@ -80,10 +80,38 @@ export default function MatchSetupPage() {
   const [role, setRole] = useState<string>("prime_minister");
   // Step 3: Motion
   const [motion, setMotion] = useState("");
+  const [motionInfo, setMotionInfo] = useState("");
+  const [isAiMotion, setIsAiMotion] = useState(false);
+  const [motionCategory, setMotionCategory] = useState("Global");
+  const [generatingMotion, setGeneratingMotion] = useState(false);
+
   // Step 4: Difficulty
   const [difficulty, setDifficulty] = useState<string>("medium");
   // Loading state
   const [loading, setLoading] = useState(false);
+
+  const generateMotion = async () => {
+    if (!session?.access_token) return;
+    setGeneratingMotion(true);
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1/motions/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ category: motionCategory, format }),
+      });
+      if (!res.ok) throw new Error("Failed to generate motion");
+      const data = await res.json();
+      setMotion(data.data.motion);
+      setMotionInfo(data.data.info);
+    } catch (err) {
+      toast.error("Failed to generate motion");
+    } finally {
+      setGeneratingMotion(false);
+    }
+  };
 
   // Derived: side is determined by role selection
   const side = ROLE_TO_SIDE[role] || "government";
@@ -253,25 +281,84 @@ export default function MatchSetupPage() {
 
           {/* ────────── STEP 3: MOTION ────────── */}
           <div className="space-y-3">
-            <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Step 3 — Debate Motion
-            </Label>
-            <Input
-              placeholder="This house believes that..."
-              value={motion}
-              onChange={(e) => setMotion(e.target.value)}
-              className="text-base h-12"
-            />
-            <div className="flex flex-wrap gap-2 pt-1">
-              {SAMPLE_MOTIONS.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMotion(m)}
-                  className="text-xs bg-muted px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors text-left"
-                >
-                  {m}
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Step 3 — Debate Motion
+              </Label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                  <div className={`relative w-9 h-5 rounded-full transition-colors ${isAiMotion ? 'bg-indigo-500' : 'bg-muted border border-border'}`}>
+                    <div className={`absolute top-[1px] left-[1px] w-4 h-4 bg-white rounded-full transition-transform ${isAiMotion ? 'translate-x-4' : ''} ${!isAiMotion ? 'bg-slate-400' : ''}`} />
+                  </div>
+                  AI Generated
+                  <input type="checkbox" className="hidden" checked={isAiMotion} onChange={(e) => {
+                    setIsAiMotion(e.target.checked);
+                    if (e.target.checked && !motion) generateMotion();
+                  }} />
+                </label>
+                {isAiMotion && (
+                  <select 
+                    value={motionCategory} 
+                    onChange={(e) => setMotionCategory(e.target.value)}
+                    className="bg-muted border border-border text-sm px-2 py-1 rounded-md text-foreground outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <option value="Global">Global</option>
+                    <option value="Tournament">Tournament</option>
+                    <option value="Random">Random</option>
+                  </select>
+                )}
+              </div>
+            </div>
+
+            <div className="relative">
+              <textarea
+                placeholder="This house believes that..."
+                value={motion}
+                onChange={(e) => setMotion(e.target.value)}
+                readOnly={isAiMotion && generatingMotion}
+                className="w-full text-base min-h-[80px] p-3 rounded-xl border border-border bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-all"
+              />
+              {isAiMotion && generatingMotion && (
+                <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center rounded-xl">
+                  <span className="text-sm font-medium animate-pulse text-indigo-400">Generating Motion...</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              {!isAiMotion ? (
+                <div className="flex flex-wrap gap-2">
+                  {SAMPLE_MOTIONS.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMotion(m)}
+                      className="text-xs bg-muted px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors text-left"
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex w-full justify-end items-center">
+                  <div className="flex gap-2">
+                    {motionInfo && (
+                      <button
+                        onClick={() => toast.info("Motion Info", { description: motionInfo, duration: 8000 })}
+                        className="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted transition-colors flex items-center gap-1"
+                      >
+                        ℹ️ show info
+                      </button>
+                    )}
+                    <button
+                      onClick={generateMotion}
+                      disabled={generatingMotion}
+                      className="text-xs border border-emerald-500/30 text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-md hover:bg-emerald-500/20 transition-colors flex items-center gap-1 disabled:opacity-50"
+                    >
+                      🔄 reroll
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
