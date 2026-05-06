@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { RefreshCw, Info } from "lucide-react";
 
 const SAMPLE_MOTIONS = [
   "This house believes that AI will do more harm than good",
@@ -348,18 +349,22 @@ export default function MatchSetupPage() {
                   <div className="flex gap-2">
                     {motionInfo && (
                       <button
-                        onClick={() => toast.info("Motion Info", { description: motionInfo, duration: 8000 })}
-                        className="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted transition-colors flex items-center gap-1"
+                        onClick={() => toast.info("Motion Info", { 
+                          description: motionInfo, 
+                          duration: 10000,
+                          action: { label: "Close", onClick: () => {} }
+                        })}
+                        className="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted transition-colors flex items-center gap-1.5"
                       >
-                        ℹ️ show info
+                        <Info className="w-3.5 h-3.5" /> Show Info
                       </button>
                     )}
                     <button
                       onClick={generateMotion}
                       disabled={generatingMotion}
-                      className="text-xs border border-emerald-500/30 text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-md hover:bg-emerald-500/20 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      className="text-xs border border-emerald-500/30 text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-md hover:bg-emerald-500/20 transition-colors flex items-center gap-1.5 disabled:opacity-50"
                     >
-                      🔄 reroll
+                      <RefreshCw className={`w-3.5 h-3.5 ${generatingMotion ? 'animate-spin' : ''}`} /> Reroll
                     </button>
                   </div>
                 </div>
