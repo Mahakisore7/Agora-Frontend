@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { RefreshCw, Info } from "lucide-react";
 
 const SAMPLE_MOTIONS = [
   "This house believes that AI will do more harm than good",
@@ -348,18 +349,36 @@ export default function MatchSetupPage() {
                   <div className="flex gap-2">
                     {motionInfo && (
                       <button
-                        onClick={() => toast.info("Motion Info", { description: motionInfo, duration: 8000 })}
-                        className="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted transition-colors flex items-center gap-1"
+                        onClick={() => toast.custom((t) => (
+                          <div className="w-[350px] bg-[#0b1120] border border-blue-900/50 shadow-2xl rounded-xl p-4 flex flex-col gap-3 relative">
+                            <div className="flex gap-3">
+                              <div className="mt-0.5 text-blue-500">
+                                <Info className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 space-y-1">
+                                <p className="text-sm font-bold text-blue-400">Motion Info</p>
+                                <p className="text-[13px] leading-relaxed text-slate-300">{motionInfo}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => toast.dismiss(t)}
+                              className="absolute top-4 right-4 text-xs font-semibold bg-white text-black px-2.5 py-1 rounded hover:bg-slate-200 transition-colors"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        ), { duration: Infinity })}
+                        className="text-xs border border-white/10 bg-white/5 text-slate-300 px-3 py-1.5 rounded-md hover:bg-white/10 hover:text-white transition-all flex items-center gap-1.5 font-medium"
                       >
-                        ℹ️ show info
+                        <Info className="w-3.5 h-3.5" /> Show Info
                       </button>
                     )}
                     <button
                       onClick={generateMotion}
                       disabled={generatingMotion}
-                      className="text-xs border border-emerald-500/30 text-emerald-500 bg-emerald-500/10 px-3 py-1.5 rounded-md hover:bg-emerald-500/20 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      className="text-xs border border-emerald-500/20 text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-md hover:bg-emerald-500/20 hover:text-emerald-300 transition-all flex items-center gap-1.5 font-medium disabled:opacity-50"
                     >
-                      🔄 reroll
+                      <RefreshCw className={`w-3.5 h-3.5 ${generatingMotion ? 'animate-spin' : ''}`} /> Reroll
                     </button>
                   </div>
                 </div>
