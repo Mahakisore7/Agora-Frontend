@@ -15,6 +15,18 @@ export default function LandingPage() {
       <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-900/40 blur-[150px] rounded-full pointer-events-none" />
       <div className="absolute top-[40%] right-[20%] w-[30%] h-[30%] bg-blue-800/20 blur-[100px] rounded-full pointer-events-none" />
 
+      {/* Grid Overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+      {/* Grid fade-out at bottom */}
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-b from-transparent via-transparent to-black" />
+
       {/* Navbar Minimal */}
       <nav className="absolute top-0 w-full z-50 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
         <div className="font-black text-2xl tracking-tighter flex items-center gap-2">
