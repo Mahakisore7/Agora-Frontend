@@ -519,7 +519,7 @@ sequenceDiagram
     GW->>WS: BinaryMessage(audio)
     WS->>Z: queue arrayBuffer
     Z->>Z: processAudioQueue()
-    Z->>🔊 source.start()
+    Z->>🔊: source.start()
 
     AI->>R: PUBLISH AI_THOUGHT_COMPLETE
     R->>GW: subscriber notify
