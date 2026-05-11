@@ -801,6 +801,5 @@ refactor: extract audio queue into module-scope
 
 [Report a bug](https://github.com/) · [Request a feature](https://github.com/) · [Watch the demo](#)
 
-*Crafted for IDL × Agentix · Hackathon 2026*
 
 </div>
