@@ -824,6 +824,9 @@ refactor: extract audio queue into module-scope
 
 <div align="center">
 
-<sub>Agora — Real-time competitive debate, built for the web.</sub>
+**Built with ⚡ by the Agora team**
+
+[Report a bug](https://github.com/) · [Request a feature](https://github.com/) · [Watch the demo](#)
+
 
 </div>
