@@ -20,7 +20,7 @@ The real-time debate arena. A voice-first, streaming interface where a human deb
 <br/>
 
 <a href="https://skillicons.dev">
-  <img src="https://skillicons.dev/icons?i=nextjs,react,typescript,tailwindcss,supabase,vercel,vscode,git,github,figma&theme=dark" />
+  <img src="https://skillicons.dev/icons?i=nextjs,react,typescript,tailwindcss,supabase,vercel&theme=dark" />
 </a>
 
 <br/>
@@ -713,12 +713,14 @@ All `NEXT_PUBLIC_*` variables are exposed to the browser. Do not place service-r
 
 ## Deployment
 
+The application is a standard Next.js project and runs anywhere Next.js runs. The recommended target is Vercel, since `middleware.ts` is designed to execute on the Edge runtime.
+
 ### Vercel
 
 1. Push the repository to GitHub.
 2. Import into Vercel.
-3. Set environment variables under Project Settings → Environment Variables.
-4. Add a custom domain. HTTPS is required for `MediaRecorder` to operate without browser warnings, especially on iOS.
+3. Set environment variables under **Project Settings → Environment Variables**. All required keys are listed in [Environment Variables](#environment-variables).
+4. Add a custom domain. HTTPS is mandatory in production — `MediaRecorder` and `AudioContext` are restricted on non-HTTPS origins, especially on iOS Safari.
 
 ### Self-hosted
 
@@ -727,12 +729,7 @@ npm run build
 npm start
 ```
 
-Behind Nginx or Cloudflare, ensure WebSocket upgrade headers are forwarded:
-
-```nginx
-proxy_set_header Upgrade    $http_upgrade;
-proxy_set_header Connection "upgrade";
-```
+If the application is fronted by a reverse proxy, ensure the proxy forwards the standard Next.js routes — including the middleware-protected routes and the OAuth callback at `/auth/callback`. No special WebSocket handling is required at the frontend tier; the WebSocket connection terminates at the Go gateway, not at this service.
 
 ---
 
