@@ -108,6 +108,17 @@ interface ArenaState {
   aiSpeechStartTime: number | null;
   humanTurnStartTime: number | null;
 
+  // ===== REJOIN FEATURE STATE =====
+  isOffline: boolean;                    // Is user currently offline?
+  offlineDuration: number;               // How long offline in seconds (local counter)
+  totalOfflineDuration: number;          // Backend's accumulated offline time
+  matchStartedAt: number | null;         // Unix timestamp from backend
+  matchDurationSeconds: number | null;   // Total match duration
+  currentTurnDurationSeconds: number;    // Duration of current speaker (e.g., 300 for 5 min)
+  timeRemainingSeconds: number;          // Calculated time remaining (auto-updated)
+  cachedAiBuffer: string;                // Full AI speech from cached buffer
+  aiStreamStatus: "IDLE" | "STREAMING" | "PAUSED" | "COMPLETED";  // AI generation state
+
   // Actions
   connect: (matchId: string, token: string) => void;
   disconnect: () => void;
@@ -122,6 +133,12 @@ interface ArenaState {
   setMatchComplete: (verdict: ArenaEvent) => void;
   processAudioQueue: () => void;
   checkAiTurnComplete: () => void;
+  
+  // ===== REJOIN ACTIONS =====
+  handleDisconnect: () => void;          // Called when WebSocket closes
+  handleReconnect: () => void;           // Called when WebSocket opens again
+  resumeFromRejoin: (state: any) => void; // Apply fetched state on rejoin
+  updateTimer: () => void;               // Decrement timer every second
 }
 
 export const useArenaStore = create<ArenaState>((set, get) => ({
@@ -146,6 +163,17 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
   adjudicationMessage: null,
   aiSpeechStartTime: null,
   humanTurnStartTime: null,
+  
+  // ===== REJOIN STATE INITIALIZATION =====
+  isOffline: false,
+  offlineDuration: 0,
+  totalOfflineDuration: 0,
+  matchStartedAt: null,
+  matchDurationSeconds: null,
+  currentTurnDurationSeconds: 300,
+  timeRemainingSeconds: 300,
+  cachedAiBuffer: "",
+  aiStreamStatus: "IDLE",
 
   connect: (matchId, token) => {
     // Tear down previous session completely: socket + audio + state
@@ -172,10 +200,21 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
     const socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
-      console.log("[Arena] WebSocket connected — waiting for user to start match.");
+      console.log("[Arena] WebSocket connected");
+      const prevSocket = get().socket;
+      const wasOffline = get().isOffline;
+      
       if (get().socket === socket) {
         set({ connected: true });
-        socket.send(JSON.stringify({ action: "START_MATCH" }));
+        
+        // REJOIN: Detect if this is a reconnect vs initial connect
+        if (prevSocket !== null && wasOffline) {
+          console.log("[Arena] Reconnected after being offline — requesting state");
+          get().handleReconnect();
+        } else {
+          console.log("[Arena] Initial connection — starting match");
+          socket.send(JSON.stringify({ action: "START_MATCH" }));
+        }
       }
     };
 
@@ -256,6 +295,21 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
           set({ adjudicationMessage: "Adjudication encountered an error." });
         } else if (data.event === "AI_ERROR") {
           console.error("[Arena] AI Error:", data.error_message);
+        } else if (data.event === "MATCH_STATE_RESPONSE") {
+          // ===== REJOIN: Received full state from backend =====
+          console.log("[Arena] Received MATCH_STATE_RESPONSE from backend");
+          get().resumeFromRejoin(data.data);
+        } else if (data.event === "GET_MATCH_STATE_FAILED") {
+          // ===== REJOIN ERROR: Failed to fetch state =====
+          console.error("[Arena] GET_MATCH_STATE failed:", data.reason);
+          set({ isOffline: true });  // Keep showing offline UI
+        } else if (data.event === "SYNTHESIZED_AUDIO_COMPLETE") {
+          // ===== REJOIN: TTS synthesis finished for cached buffer =====
+          console.log("[Arena] Synthesized audio playback complete for:", data.speaker);
+        } else if (data.event === "SYNTHESIZE_FAILED") {
+          // ===== REJOIN ERROR: TTS synthesis failed =====
+          console.warn("[Arena] TTS synthesis failed:", data.reason);
+          // Continue anyway - user sees transcript, just no audio
         }
       } catch {
         console.warn("[Arena] Unknown message:", event.data);
@@ -264,11 +318,10 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
 
     socket.onerror = (e) => console.warn("[Arena] WS Error (harmless if during unmount):", e);
     socket.onclose = () => {
-      console.log("[Arena] WebSocket disconnected — stopping audio.");
+      console.log("[Arena] WebSocket disconnected");
       if (get().socket === socket) {
-        // Kill audio immediately when the WebSocket drops
-        _stopAllAudio();
-        set({ connected: false, socket: null, audioQueue: [], isPlayingAudio: false });
+        // REJOIN: Call disconn handler instead of inline close logic
+        get().handleDisconnect();
       }
     };
 
@@ -465,5 +518,107 @@ export const useArenaStore = create<ArenaState>((set, get) => ({
         ai_speech_duration_ms: durationMs
       });
     }
+  },
+
+  // ===== REJOIN HANDLERS =====
+  handleDisconnect: () => {
+    /**
+     * Called when WebSocket disconnects unexpectedly.
+     * Stops audio, marks user offline, starts offline duration counter.
+     */
+    console.log("[Arena] WebSocket disconnected - starting offline mode");
+    _stopAllAudio();
+    set({
+      isOffline: true,
+      connected: false,
+      audioQueue: [],
+      isPlayingAudio: false,
+      offlineDuration: 0,
+      socket: null,
+    });
+    
+    // Start incrementing offline duration every 100ms
+    const offlineInterval = setInterval(() => {
+      const state = get();
+      if (!state.isOffline) {
+        clearInterval(offlineInterval);
+        return;
+      }
+      set(s => ({ offlineDuration: s.offlineDuration + 0.1 }));
+    }, 100);
+  },
+
+  handleReconnect: () => {
+    /**
+     * Called when WebSocket reconnects after being offline.
+     * Sends GET_MATCH_STATE to fetch full state from backend.
+     */
+    console.log("[Arena] WebSocket reconnected - requesting match state");
+    const socket = get().socket;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        event: "GET_MATCH_STATE",
+        match_id: get().matchId,
+      }));
+    }
+  },
+
+  resumeFromRejoin: (serverState: any) => {
+    /**
+     * Called after receiving MATCH_STATE_RESPONSE from backend.
+     * Updates all state from server, requests TTS for cached buffer if needed.
+     */
+    console.log("[Arena] Resuming from rejoin with server state:", serverState);
+    
+    // Extract schedule info
+    const schedule = serverState.schedule || [];
+    const currentTurnIndex = serverState.current_turn_index || 0;
+    const currentSpeaker = schedule[currentTurnIndex];
+    
+    // Update state with server values
+    set({
+      isOffline: false,
+      matchStartedAt: serverState.match_started_at,
+      matchDurationSeconds: serverState.match_duration_seconds,
+      currentTurnDurationSeconds: serverState.current_turn_duration_seconds,
+      totalOfflineDuration: serverState.total_offline_duration,
+      timeRemainingSeconds: serverState.time_remaining_seconds,
+      cachedAiBuffer: serverState.active_stream_buffer || "",
+      aiStreamStatus: serverState.ai_stream_status || "IDLE",
+      currentSpeaker: currentSpeaker?.player_type === "ai" ? "ai" : (currentSpeaker?.player_type === "human" ? "human" : null),
+      currentSpeakerRole: currentSpeaker?.role || null,
+      offlineDuration: 0,
+    });
+
+    // If AI was generating and buffer exists, request TTS synthesis
+    const hasBuffer = (serverState.active_stream_buffer || "").trim().length > 0;
+    const aiWasGenerating = serverState.ai_stream_status && 
+                           (serverState.ai_stream_status === "STREAMING" || 
+                            serverState.ai_stream_status === "COMPLETED");
+    
+    if (hasBuffer && aiWasGenerating && currentSpeaker?.player_type === "ai") {
+      console.log("[Arena] Requesting TTS synthesis for cached buffer:", serverState.active_stream_buffer.substring(0, 50) + "...");
+      const socket = get().socket;
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          event: "SYNTHESIZE_CACHED_SPEECH",
+          text: serverState.active_stream_buffer,
+          speaker: currentSpeaker?.role || "Unknown",
+        }));
+      }
+    }
+  },
+
+  updateTimer: () => {
+    /**
+     * Called every second by useEffect to decrement timer.
+     * Skipped if offline (paused timer).
+     */
+    const state = get();
+    if (state.isOffline) return;  // Don't update if offline
+    
+    set(s => ({
+      timeRemainingSeconds: Math.max(0, s.timeRemainingSeconds - 1),
+    }));
   },
 }));

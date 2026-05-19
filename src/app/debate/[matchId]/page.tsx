@@ -41,7 +41,9 @@ function ArenaInner() {
     connected, transcript, aiBufferedText, humanBufferedText, aiThoughtComplete,
     isMatchComplete, currentSpeaker, currentSpeakerRole,
     adjudicationComplete, adjudicationMessage,
-    isPlayingAudio, isAudioPaused, pauseAudio, resumeAudio, skipAiSpeech
+    isPlayingAudio, isAudioPaused, pauseAudio, resumeAudio, skipAiSpeech,
+    // ===== REJOIN FEATURE =====
+    isOffline, offlineDuration, timeRemainingSeconds, updateTimer
   } = useArenaStore();
 
   // Audio progress bar animation
@@ -79,6 +81,18 @@ function ArenaInner() {
     }, 90000);
     return () => clearTimeout(timer);
   }, [isMatchComplete, matchId, format, router]);
+
+  // ===== REJOIN FEATURE: Timer countdown =====
+  // Decrement timer every 1s when connected and not offline
+  useEffect(() => {
+    if (!connected || isOffline) return;
+    
+    const timerInterval = setInterval(() => {
+      updateTimer();
+    }, 1000);
+    
+    return () => clearInterval(timerInterval);
+  }, [connected, isOffline, updateTimer]);
 
   // Production-Grade MediaRecorder Streaming
   const toggleMic = async () => {
@@ -251,6 +265,28 @@ function ArenaInner() {
         </button>
       </header>
 
+      {/* ===== REJOIN: OFFLINE BANNER ===== */}
+      <AnimatePresence>
+        {isOffline && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-amber-950/80 border-b border-amber-600/40 px-4 py-3 flex items-center justify-center gap-3 backdrop-blur-sm"
+          >
+            <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse" />
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-amber-200">
+                Connection lost. Reconnecting...
+              </span>
+              <span className="text-xs text-amber-300 font-mono">
+                {Math.floor(offlineDuration)}s
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex-1 flex overflow-hidden z-10 w-full">
         
         {/* Left Sidebar: Debate Schedule */}
@@ -259,6 +295,23 @@ function ArenaInner() {
             <Users className="w-4 h-4" />
             Speaker Schedule
           </h2>
+          
+          {/* ===== REJOIN: TIMER DISPLAY ===== */}
+          <div className={`mb-6 p-4 rounded-xl border-2 text-center transition-all ${
+            isOffline 
+              ? 'bg-amber-950/40 border-amber-600/50' 
+              : 'bg-indigo-950/40 border-indigo-600/50'
+          }`}>
+            <p className={`text-xs font-bold uppercase tracking-widest mb-2 ${isOffline ? 'text-amber-300' : 'text-indigo-300'}`}>
+              Time Remaining
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-3xl font-black text-white font-mono">
+                {String(Math.floor(timeRemainingSeconds / 60)).padStart(2, '0')}:{String(Math.floor(timeRemainingSeconds % 60)).padStart(2, '0')}
+              </span>
+              {isOffline && <Pause className="w-5 h-5 text-amber-400 animate-pulse" />}
+            </div>
+          </div>
           
           <div className="space-y-2 relative">
             {/* Vertical timeline line */}
