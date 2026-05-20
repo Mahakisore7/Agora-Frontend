@@ -69,6 +69,7 @@ export default function SignupPage() {
       email, 
       password,
       options: {
+        emailRedirectTo: redirectTo,
         data: {
           display_name: username
         }
