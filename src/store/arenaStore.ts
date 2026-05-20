@@ -3,6 +3,7 @@ import { create } from "zustand";
 export type EventType =
   | "AI_TOKEN"
   | "HUMAN_TRANSCRIPT"
+  | "HUMAN_TRANSCRIPT_CHUNK"
   | "POI_ACCEPTED"
   | "POI_DECLINED"
   | "AI_ERROR"
