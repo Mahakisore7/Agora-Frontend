@@ -76,6 +76,8 @@ interface AdjudicationResult {
   speaker_scores: SpeakerScore[];
   summary: AdjudicationSummary;
   session_id: string;
+  gov_total_score?: number;
+  opp_total_score?: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
