@@ -188,7 +188,29 @@ graph TD
 
 A thick React client owns the WebSocket and the Web Audio queue in a Zustand store, server components handle non-real-time data fetching, and Edge middleware gates authentication before any bundle leaves the CDN.
 
+### Production Deployment & Cloud Architecture
+
+In the live production environment, the system is distributed across multiple hosting tiers to optimize for real-time performance, low latency, and secure streaming:
+
+![Deployment Architecture](assets/agora_architecture_diagram.png)
+
+#### 1. Frontend Layer (Vercel Cloud)
+- **Host:** Deployed serverlessly at `https://agora-frontend-alpha.vercel.app`.
+- **Role:** Delivers the responsive, responsive web interface, handles Client state (Zustand), captures human microphone audio via browser `MediaRecorder`, schedules TTS playback buffers sequentially using the Web Audio API, and interacts directly with Supabase Cloud for user sign-in/sign-up sessions.
+
+#### 2. Real-Time Routing & Gateways (AWS EC2 VM)
+- **Host:** AWS EC2 instance running Amazon Linux 2023 (`16.171.42.39.nip.io`).
+- **Nginx Reverse Proxy:** Serves as the SSL/TLS termination gate (ports 80/443). Cryptographically decrypts incoming secure HTTPS/WSS traffic using a **Let's Encrypt** authority certificate, proxying connection queries locally to the Go gateway on `http://localhost:8080`.
+- **Go Gateway (Port 8080):** A highly concurrent reverse proxy terminating long-lived WebSocket connections, validating Supabase JWT tokens, multiplexing binary audio slices to Deepgram, and coordinating Redis message routing.
+- **Python AI Engine (Port 8000):** FastAPI server orchestrating the 4-phase debate agent, LangChain/Groq LLaMA models, pgvector searches, and WUDC adjudication.
+- **Redis Event Broker:** Active in a Docker container acting as a Pub/Sub queue to stream token arrays instantaneously between the AI Engine and Go Gateway.
+
+#### 3. Persistence & Auth Tier (Supabase Cloud)
+- **Host:** PostgreSQL + pgvector databases deployed in AWS region `ap-southeast-2` (Sydney).
+- **Role:** Handles secure Supabase OAuth and stores tables containing debates, match configurations, speaker grades, and case-prep embeddings. Connects to backend containers via the dedicated, highly stable production pooler host (`aws-1-ap-southeast-2.pooler.supabase.com`).
+
 ---
+
 
 ## User Flow
 
@@ -715,12 +737,29 @@ All `NEXT_PUBLIC_*` variables are exposed to the browser. Do not place service-r
 
 The application is a standard Next.js project and runs anywhere Next.js runs. The recommended target is Vercel, since `middleware.ts` is designed to execute on the Edge runtime.
 
-### Vercel
+### Vercel (Production)
 
-1. Push the repository to GitHub.
-2. Import into Vercel.
-3. Set environment variables under **Project Settings → Environment Variables**. All required keys are listed in [Environment Variables](#environment-variables).
-4. Add a custom domain. HTTPS is mandatory in production — `MediaRecorder` and `AudioContext` are restricted on non-HTTPS origins, especially on iOS Safari.
+The frontend is live at `https://agora-frontend-alpha.vercel.app`. To deploy your own frontend instance:
+
+1. Push your repository to GitHub.
+2. Import the project in Vercel.
+3. Configure target **Environment Variables** in **Project Settings → Environment Variables**:
+   - `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL.
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key.
+   - `NEXT_PUBLIC_API_BASE_URL`: The secure production API backend (`https://16.171.42.39.nip.io`).
+   - `NEXT_PUBLIC_WS_BASE_URL`: The secure production WebSocket backend (`wss://16.171.42.39.nip.io`).
+   - `NEXT_PUBLIC_SITE_URL`: Your Vercel frontend domain (`https://your-app.vercel.app`).
+4. Ensure the backend domain uses HTTPS. Browsers enforce strict security constraints on raw microphone capture (`getUserMedia`) and Web Audio APIs, blocking them on insecure HTTP origins (except `localhost`).
+
+> [!IMPORTANT]
+> **Mixed Content Blocks Resolved:**
+> In early deployments, the frontend experienced `Failed to generate motion` errors due to "Mixed Content" security rules. Because the frontend was served over secure HTTPS on Vercel, modern browsers strictly blocked API requests and WebSocket upgrades to the EC2 backend's unencrypted IP address (`http://16.171.42.39:8080`).
+>
+> We resolved this production blocker by:
+> 1. Setting up a dynamic DNS hostname utilizing the `nip.io` wildcard mapping to map `16.171.42.39` to `16.171.42.39.nip.io`.
+> 2. Placing an Nginx proxy on the EC2 machine listening on Ports 80 and 443.
+> 3. Running Certbot to generate and auto-renew a valid, browser-trusted **Let's Encrypt SSL Certificate** for the hostname.
+> 4. Pointing Vercel's environment variables to the new secure `https://` and `wss://` dynamic domain gateways.
 
 ### Self-hosted
 
